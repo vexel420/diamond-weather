@@ -1,5 +1,5 @@
 // Loading games, weather, ticket prices, and working out scores and trips. No DOM in this file.
-import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS, NBA_VENUES, NFL_VENUES } from './data.js?v=9';
+import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS, NBA_VENUES, NFL_VENUES } from './data.js?v=10';
 
 // ───────── Dates and time zones ─────────
 export const pad = n => String(n).padStart(2, '0');
@@ -44,10 +44,18 @@ async function getJSON(url, ms = 12000, tries = 2) {
 // ───────── Schedules ─────────
 const BASEBALL_TYPES = { S: 'Spring training', E: 'Exhibition', A: 'All-Star Game', F: 'Wild Card', D: 'Division Series', L: 'League Championship', W: 'World Series' };
 
+// ESPN's logo for each NHL and MLB team, saved by scripts/build-logos.mjs
+let logoCache = null;
+const logoTable = () => (logoCache ||= getJSON('data/logos.json').then(d => d.logos || {}).catch(() => ({})));
+const espnLogo = (logos, name, fallback) => logos[plain(name)] || fallback;
+
 export async function loadBaseball(start, end, sports) {
   const ids = [sports.includes('mlb') && 1, sports.includes('aaa') && 11].filter(Boolean);
   if (!ids.length) return [];
-  const data = await getJSON(`https://statsapi.mlb.com/api/v1/schedule?sportId=${ids.join(',')}&startDate=${start}&endDate=${end}&hydrate=team,venue(location,timezone),probablePitcher`);
+  const [data, logos] = await Promise.all([
+    getJSON(`https://statsapi.mlb.com/api/v1/schedule?sportId=${ids.join(',')}&startDate=${start}&endDate=${end}&hydrate=team,venue(location,timezone),probablePitcher`),
+    logoTable()
+  ]);
   const out = [];
   for (const day of data.dates || []) for (const g of day.games || []) {
     const home = g.teams.home.team, away = g.teams.away.team;
@@ -59,8 +67,8 @@ export async function loadBaseball(start, end, sports) {
       id: `b${g.gamePk}`, sport, date: g.officialDate || day.date, tbd: !!g.status?.startTimeTBD,
       // No start time yet: assume a 7 PM local start so the weather and trip estimates have something to work from
       start: g.status?.startTimeTBD ? zonedTime(g.officialDate || day.date, 19 * 60, v.timeZone?.id || 'America/New_York') : new Date(g.gameDate).getTime(), status: g.status?.detailedState || '', label: BASEBALL_TYPES[g.gameType] || '',
-      away: { name: away.name, short: away.teamName || away.name, logo: `https://www.mlbstatic.com/team-logos/${away.id}.svg` },
-      home: { name: home.name, short: home.teamName || home.name, logo: `https://www.mlbstatic.com/team-logos/${home.id}.svg` },
+      away: { name: away.name, short: away.teamName || away.name, logo: sport === 'mlb' ? espnLogo(logos, away.name, `https://www.mlbstatic.com/team-logos/${away.id}.svg`) : `https://www.mlbstatic.com/team-logos/${away.id}.svg` },
+      home: { name: home.name, short: home.teamName || home.name, logo: sport === 'mlb' ? espnLogo(logos, home.name, `https://www.mlbstatic.com/team-logos/${home.id}.svg`) : `https://www.mlbstatic.com/team-logos/${home.id}.svg` },
       venue: v.name || 'Venue to be announced', venueKey: `v${v.id}`,
       city: info?.city || loc.city || '', tz: v.timeZone?.id || 'America/New_York',
       lat: c.latitude, lon: c.longitude,
@@ -75,6 +83,7 @@ export async function loadBaseball(start, end, sports) {
 let nhlCache = null;
 export async function loadHockey(start, end) {
   nhlCache ||= await getJSON('data/nhl.json');
+  const logos = await logoTable();
   const out = [];
   for (const g of nhlCache.games) {
     const ms = new Date(g.start).getTime();
@@ -83,7 +92,7 @@ export async function loadHockey(start, end) {
     const tz = atHome ? arena.tz : (g.tz || 'America/New_York');
     const date = dateInZone(ms, tz);
     if (date < start || date > end) continue;
-    const t = c => ({ name: nhlCache.teams[c]?.name || c, short: nhlCache.teams[c]?.short || c, logo: nhlCache.teams[c]?.logo || '' });
+    const t = c => ({ name: nhlCache.teams[c]?.name || c, short: nhlCache.teams[c]?.short || c, logo: espnLogo(logos, nhlCache.teams[c]?.name, nhlCache.teams[c]?.logo || '') });
     out.push({
       id: `h${g.id}`, sport: 'nhl', start: ms, date, tbd: false,
       status: g.state === 'OK' ? '' : ({ PPD: 'Postponed', CNCL: 'Cancelled', SUSP: 'Suspended', TBD: 'Time to be announced' }[g.state] || g.state),
@@ -181,7 +190,7 @@ async function locateUnknown(list) {
     if (!loc) continue;
     g.lat = loc.lat; g.lon = loc.lon; g.tz = loc.tz || g.tz;
     if (!g.info) {
-      airportRows ||= await getJSON('data/airports.json?v=9').then(d => d.list.map(a => [a[0], a[1], a[4], a[5], d.zones[a[6]]])).catch(() => []);
+      airportRows ||= await getJSON('data/airports.json?v=10').then(d => d.list.map(a => [a[0], a[1], a[4], a[5], d.zones[a[6]]])).catch(() => []);
       const near = airportRows.map(a => [a, miles(loc.lat, loc.lon, a[2], a[3])]).sort((x, y) => x[1] - y[1]).slice(0, 2);
       for (const [a] of near) AIRPORTS[a[0]] ||= [a[1], a[2], a[3], a[4]];
       g.info = driveInfo(near.map(([a, mi]) => [a[0], Math.round(mi)]), g.city);

@@ -166,7 +166,8 @@ h3.group small { font-size: 13.5px; font-weight: 450; color: var(--faint); lette
 .teams { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 19px; font-weight: 620; letter-spacing: -.025em; line-height: 1.2; }
 .teams .at { font-weight: 400; color: var(--faint); font-size: 15px; }
 .teams span.t { display: inline-flex; align-items: center; gap: 7px; }
-.teams img { width: 24px; height: 24px; object-fit: contain; flex: none; }
+.teams .logo { position: relative; display: inline-block; flex: none; width: 1.6em; height: 1.6em; }
+.teams .logo img { display: block; width: 100%; height: 100%; object-fit: contain; }
 .venue { font-size: 13.5px; color: var(--sub); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 .fact { min-width: 0; display: grid; gap: 2px; }
@@ -277,7 +278,6 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
   .sort select { font-size: 14px; }
   .game-main { padding: 16px 14px; gap: 6px 12px; grid-template-columns: minmax(0, 1fr) auto; }
   .teams { font-size: 17px; }
-  .teams img { width: 20px; height: 20px; }
   .game-main .facts { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 14px; }
   .price .amt { font-size: 17px; }
   .detail { padding: 18px 14px; }

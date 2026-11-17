@@ -12,6 +12,7 @@ A static site: no build step and no server. Open `index.html` through any web se
 | MLB and Triple-A schedules | MLB Stats API | Loaded live in the browser |
 | NBA, NFL and college football schedules | ESPN's public scoreboard feed | Loaded live in the browser. It is unofficial and undocumented, so ESPN could change it without notice. It also carries a "tickets from" price from Vivid Seats. |
 | NBA, NFL and college venue locations | `data/venues.json` | ESPN names each venue's city but not its coordinates, so `scripts/build-venues.mjs` looks each city up with Open-Meteo's geocoder and finds the nearest airports. A GitHub Action refreshes it weekly. Venues missing from the file are looked up in the browser. |
+| Team logos | ESPN; Triple-A from MLB | `data/logos.json` maps NHL and MLB teams to ESPN's logos (`scripts/build-logos.mjs`, refreshed weekly). The page trims each logo's empty space and draws them all at the same size. |
 | NHL schedule | NHL schedule service | The NHL does not allow requests from web pages, so `scripts/build-nhl.mjs` saves it to `data/nhl.json`. A GitHub Action refreshes it daily. |
 | Weather | Open-Meteo | Hourly forecast up to 16 days out. Beyond that, what is typical for the week over the past three years. |
 | Ticket prices | SeatGeek | Needs a free client ID, entered in Trip settings. Stored only in the browser. |

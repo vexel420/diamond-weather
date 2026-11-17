@@ -1,9 +1,9 @@
-import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=9';
+import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=10';
 import {
   todayStr, addDays, clock, pad, OFFSETS,
   loadBaseball, loadHockey, nextBaseballDate, nextHockeyDate, nhlUpdated, loadEspn, nextEspnDate,
   attachWeather, attachPrices, attachEspnPrices, scoreGame, DEPLANE, weatherGrade, skyOf, findPairs, ticketLinks, TRIP_LABEL
-} from './core.js?v=9';
+} from './core.js?v=10';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -178,8 +178,45 @@ function priceFact(g) {
   if (g.price != null) return `<div class="price"><div class="amt"><small>from</small>$${g.price}</div><div class="s">Details ${chev}</div></div>`;
   return `<div class="price"><div class="s">Details ${chev}</div></div>`;
 }
+// Logos come with different amounts of empty space around them. Each one is measured once, trimmed to
+// its artwork, and drawn at the same visual size: square logos at LOGO_BASE, wide ones a little shorter.
+const LOGO_BASE = 1.6, LOGO_MAX_W = 2.4;                  // in em of the team name
+const LOGO_CORS = /^https:\/\/(a\.espncdn\.com|www\.mlbstatic\.com)\//; // hosts that let the page measure their images
+const logoFit = new Map();
+function measureLogo(img) {
+  const N = 120, c = document.createElement('canvas');
+  c.width = c.height = N;
+  const x = c.getContext('2d', { willReadFrequently: true });
+  const iw = img.naturalWidth || N, ih = img.naturalHeight || N;
+  const r = Math.min(N / iw, N / ih), dw = iw * r, dh = ih * r, ox = (N - dw) / 2, oy = (N - dh) / 2;
+  x.drawImage(img, ox, oy, dw, dh);
+  let px;
+  try { px = x.getImageData(0, 0, N, N).data; } catch { return null; }
+  let x0 = N, y0 = N, x1 = -1, y1 = -1;
+  for (let y = 0; y < N; y++) for (let k = 0; k < N; k++) {
+    if (px[(y * N + k) * 4 + 3] > 24) { if (k < x0) x0 = k; if (k > x1) x1 = k; if (y < y0) y0 = y; if (y > y1) y1 = y; }
+  }
+  if (x1 < 0) return null;
+  const bx = (x0 - ox) / dw, by = (y0 - oy) / dh, bw = (x1 - x0 + 1) / dw, bh = (y1 - y0 + 1) / dh;
+  const aspect = (bw * iw) / (bh * ih);
+  let h = LOGO_BASE / Math.sqrt(Math.max(aspect, 1));
+  if (h * aspect > LOGO_MAX_W) h = LOGO_MAX_W / aspect;
+  const w = h * aspect, fw = w / bw, fh = h / bh;
+  const em = n => `${n.toFixed(3)}em`;
+  return { box: `width:${em(w)};height:${em(h)}`, img: `position:absolute;max-width:none;width:${em(fw)};height:${em(fh)};left:${em(-bx * fw)};top:${em(-by * fh)}` };
+}
+document.addEventListener('load', e => {
+  const img = e.target;
+  if (!(img instanceof HTMLImageElement) || !img.parentElement?.classList.contains('logo')) return;
+  const src = img.getAttribute('src');
+  if (!logoFit.has(src)) logoFit.set(src, measureLogo(img));
+  const fit = logoFit.get(src);
+  if (fit) { img.parentElement.style.cssText = fit.box; img.style.cssText = fit.img; }
+}, true);
 function teamHTML(t) {
-  return `<span class="t">${t.logo ? `<img src="${esc(t.logo)}" alt="" loading="lazy" onerror="this.remove()">` : ''}${esc(t.short)}</span>`;
+  if (!t.logo) return `<span class="t">${esc(t.short)}</span>`;
+  const fit = logoFit.get(t.logo);
+  return `<span class="t"><span class="logo"${fit ? ` style="${fit.box}"` : ''}><img src="${esc(t.logo)}" alt=""${LOGO_CORS.test(t.logo) ? ' crossorigin="anonymous"' : ''}${fit ? ` style="${fit.img}"` : ''} loading="lazy" onerror="this.parentNode.remove()"></span>${esc(t.short)}</span>`;
 }
 
 function hoursHTML(g) {
@@ -463,7 +500,7 @@ $('cushionIn').innerHTML = [30, 45, 60, 90, 120].map(m => `<option value="${m}">
 // Home airport picker: a searchable list of every airport with airline service
 let airportDb = null, airportLoad = null, pick = null, matches = [], hi = -1;
 function loadAirports() {
-  airportLoad ||= fetch('data/airports.json?v=9')
+  airportLoad ||= fetch('data/airports.json?v=10')
     .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
     .then(d => {
       airportDb = d.list.map(a => ({
