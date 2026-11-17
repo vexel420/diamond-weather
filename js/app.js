@@ -1,9 +1,9 @@
-import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js';
+import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=4';
 import {
   todayStr, addDays, clock, pad, OFFSETS,
   loadBaseball, loadHockey, nextBaseballDate, nextHockeyDate, nhlUpdated,
   attachWeather, attachPrices, scoreGame, weatherGrade, skyOf, findPairs, ticketLinks, TRIP_LABEL
-} from './core.js';
+} from './core.js?v=4';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -24,6 +24,11 @@ try {
   const s = JSON.parse(localStorage.getItem('diamondWeather3') || 'null');
   if (s) { prefs = { ...DEFAULTS, ...s.prefs }; saved = new Set(s.saved || []); }
 } catch { /* storage unavailable: run with defaults */ }
+// A home airport outside the venue list carries its own details, saved when it was picked
+if (prefs.home && !AIRPORTS[prefs.home]) {
+  if (Array.isArray(prefs.homeInfo)) AIRPORTS[prefs.home] = prefs.homeInfo;
+  else prefs.home = '';
+}
 const store = () => { try { localStorage.setItem('diamondWeather3', JSON.stringify({ prefs, saved: [...saved] })); } catch { /* ignore */ } };
 
 // ───────── Formatting ─────────
@@ -409,31 +414,106 @@ document.querySelector('.results').addEventListener('keydown', e => {
 
 // ───────── Trip settings ─────────
 const dlg = $('tripDlg');
-$('airportList').innerHTML = Object.entries(AIRPORTS).sort((a, b) => a[0].localeCompare(b[0])).map(([c, a]) => `<option value="${c}">${esc(a[0])}</option>`).join('');
 $('airlineIn').insertAdjacentHTML('beforeend', Object.entries(AIRLINES).map(([c, a]) => `<option value="${c}">${esc(a[0])}</option>`).join(''));
 const timeOpts = (from, to) => { let s = ''; for (let m = from; m <= to; m += 30) s += `<option value="${m}">${fmtMin(m)}</option>`; return s; };
 $('earliestIn').innerHTML = timeOpts(300, 600);
 $('latestIn').innerHTML = timeOpts(1020, 1410);
+
+// Home airport picker: a searchable list of every airport with airline service
+let airportDb = null, airportLoad = null, pick = null, matches = [], hi = -1;
+function loadAirports() {
+  airportLoad ||= fetch('data/airports.json?v=4')
+    .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
+    .then(d => {
+      airportDb = d.list.map(a => ({
+        code: a[0], city: a[1], region: a[2], name: a[3], lat: a[4], lon: a[5], tz: d.zones[a[6]],
+        home: a[2].length === 2, hay: `${a[1]} ${a[3]} ${a[7] || ''} ${a[2]}`.toLowerCase()
+      }));
+    })
+    .catch(e => { airportLoad = null; throw e; });
+  return airportLoad;
+}
+const airportLabel = a => `${a.code}  ${a.city}${a.region ? ', ' + a.region : ''}`;
+function searchAirports(q) {
+  q = q.trim().toLowerCase();
+  if (!q || !airportDb) return [];
+  const found = [];
+  for (const a of airportDb) {
+    const code = a.code.toLowerCase(), at = a.hay.indexOf(q);
+    let tier = -1;
+    if (code === q) tier = 0;
+    else if (code.startsWith(q)) tier = 1;
+    else if (at === 0) tier = 2;
+    else if (q.length >= 2 && new RegExp('[\\s/(-]' + q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).test(a.hay)) tier = 3; // start of a later word
+    if (tier >= 0) found.push([tier, a]);
+  }
+  // Exact and prefix matches first, North American airports ahead of the rest of the world
+  found.sort((x, y) => (x[0] - y[0]) || (y[1].home - x[1].home) || x[1].code.localeCompare(y[1].code));
+  return found.slice(0, 40).map(x => x[1]);
+}
+function showMatches() {
+  const ul = $('homeList'), inp = $('homeIn'), q = inp.value;
+  $('homeClear').hidden = !q;
+  if (pick || !q.trim()) { ul.hidden = true; inp.setAttribute('aria-expanded', 'false'); return; }
+  matches = searchAirports(q); hi = matches.length ? 0 : -1;
+  ul.innerHTML = !airportDb ? '<li class="none">Loading airports</li>'
+    : !matches.length ? '<li class="none">No airport matches that. Try the three-letter code or the city.</li>'
+    : matches.map((a, i) => `<li role="option" id="ap${i}" data-i="${i}" aria-selected="${i === hi}"><b>${a.code}</b><span>${esc(a.city)}${a.region ? ', ' + esc(a.region) : ''}</span>${a.name && a.name !== a.city ? `<small>${esc(a.name)}</small>` : ''}</li>`).join('');
+  ul.hidden = false; inp.setAttribute('aria-expanded', 'true');
+}
+function moveHi(d) {
+  if (!matches.length) return;
+  hi = (hi + d + matches.length) % matches.length;
+  $('homeList').querySelectorAll('li').forEach((li, i) => { li.setAttribute('aria-selected', String(i === hi)); if (i === hi) li.scrollIntoView({ block: 'nearest' }); });
+  $('homeIn').setAttribute('aria-activedescendant', `ap${hi}`);
+}
+function choose(a) {
+  pick = a; $('homeIn').value = airportLabel(a); $('homeMsg').hidden = true;
+  $('homeIn').removeAttribute('aria-activedescendant');
+  showMatches();
+}
+function homeError(msg) { const m = $('homeMsg'); m.textContent = msg; m.className = 'hint err'; m.hidden = false; }
+
 function openSettings() {
-  $('homeIn').value = prefs.home; $('airlineIn').value = prefs.airline;
+  pick = prefs.home ? { code: prefs.home, keep: true } : null;
+  $('homeIn').value = prefs.home ? (prefs.homeLabel || `${prefs.home}  ${AIRPORTS[prefs.home]?.[0] || ''}`.trim()) : '';
+  $('homeClear').hidden = !prefs.home; $('homeList').hidden = true; $('homeMsg').hidden = true;
+  $('airlineIn').value = prefs.airline;
   $('earliestIn').value = prefs.earliest; $('latestIn').value = prefs.latest; $('sgIn').value = prefs.sgKey;
-  $('homeIn').setCustomValidity('');
   dlg.showModal();
+  loadAirports().then(showMatches).catch(() => homeError("The airport list didn't load. Check your connection, then close and reopen settings."));
 }
 $('tripBtn').onclick = openSettings;
-$('homeIn').oninput = e => { e.target.value = e.target.value.toUpperCase(); e.target.setCustomValidity(''); };
+$('homeIn').addEventListener('input', () => { pick = null; $('homeMsg').hidden = true; showMatches(); });
+$('homeIn').addEventListener('focus', e => { if (pick) e.target.select(); });
+$('homeIn').addEventListener('keydown', e => {
+  const listOpen = !$('homeList').hidden;
+  if (e.key === 'ArrowDown') { e.preventDefault(); moveHi(1); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); moveHi(-1); }
+  else if (e.key === 'Enter' && listOpen) { e.preventDefault(); if (matches[hi]) choose(matches[hi]); }
+  else if (e.key === 'Escape' && listOpen) { e.preventDefault(); $('homeList').hidden = true; }
+});
+$('homeList').addEventListener('mousedown', e => e.preventDefault()); // keep focus in the box while picking
+$('homeList').addEventListener('click', e => { const li = e.target.closest('li[data-i]'); if (li) choose(matches[+li.dataset.i]); });
+$('homeClear').onclick = () => { pick = null; $('homeIn').value = ''; $('homeMsg').hidden = true; showMatches(); $('homeIn').focus(); };
+
 $('tripForm').addEventListener('submit', e => {
   if (e.submitter?.value !== 'save') return;
-  const home = $('homeIn').value.trim().toUpperCase();
-  if (home && !AIRPORTS[home]) {
-    e.preventDefault();
-    $('homeIn').setCustomValidity("That code isn't in the list yet. Pick the nearest airport offered.");
-    $('homeIn').reportValidity();
-    return;
+  const typed = $('homeIn').value.trim();
+  if (typed && !pick) {
+    // Typed a code without tapping a row: accept it if it is an exact airport code
+    const exact = airportDb?.find(a => a.code === typed.toUpperCase());
+    if (exact) choose(exact);
+    else { e.preventDefault(); homeError('Choose an airport from the list so the code is one we know.'); $('homeIn').focus(); showMatches(); return; }
   }
   const keyChanged = $('sgIn').value.trim() !== prefs.sgKey;
-  Object.assign(prefs, { home, airline: $('airlineIn').value, earliest: +$('earliestIn').value, latest: +$('latestIn').value, sgKey: $('sgIn').value.trim() });
-  if (!home) prefs.trip = 'any';
+  Object.assign(prefs, { airline: $('airlineIn').value, earliest: +$('earliestIn').value, latest: +$('latestIn').value, sgKey: $('sgIn').value.trim() });
+  if (!typed) { prefs.home = ''; prefs.homeInfo = null; prefs.homeLabel = ''; prefs.trip = 'any'; }
+  else if (!pick.keep) {
+    prefs.home = pick.code; prefs.homeLabel = airportLabel(pick);
+    prefs.homeInfo = [pick.city, pick.lat, pick.lon, pick.tz];
+    AIRPORTS[pick.code] ||= prefs.homeInfo;
+  }
   store();
   if (keyChanged) load(); else { rescore(); render(); }
 });

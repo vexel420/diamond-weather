@@ -1,5 +1,5 @@
 // Loading games, weather, ticket prices, and working out scores and trips. No DOM in this file.
-import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS } from './data.js';
+import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS } from './data.js?v=4';
 
 // ───────── Dates and time zones ─────────
 export const pad = n => String(n).padStart(2, '0');

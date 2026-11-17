@@ -13,7 +13,8 @@ A static site: no build step and no server. Open `index.html` through any web se
 | NHL schedule | NHL schedule service | The NHL does not allow requests from web pages, so `scripts/build-nhl.mjs` saves it to `data/nhl.json`. A GitHub Action refreshes it daily. |
 | Weather | Open-Meteo | Hourly forecast up to 16 days out. Beyond that, what is typical for the week over the past three years. |
 | Ticket prices | SeatGeek | Needs a free client ID, entered in Trip settings. Stored only in the browser. |
-| Transit notes, airports, airline hubs | `js/data.js` | Written by hand. Edit this file to correct a route. |
+| Transit notes, airline hubs | `js/data.js` | Written by hand. Edit this file to correct a route. |
+| Home airport list | `data/airports.json` | About 3,270 airports with airline service worldwide, from OurAirports (public domain) plus small US airports added by hand. Rebuilt with `scripts/build-airports.py`. |
 
 ## Flight estimates
 
@@ -25,6 +26,11 @@ ground times and each airline's hub list. They are not built from airline schedu
 1. Push this folder to a GitHub repository.
 2. In the repository: Settings, Pages, set Source to "Deploy from a branch", branch `main`, folder `/ (root)`.
 3. In Settings, Actions, General, set Workflow permissions to "Read and write" so the daily NHL refresh can save its update.
+
+## After changing a file
+
+Browsers hold on to old copies of the scripts. When you change anything in `js/`, `css/` or `data/airports.json`,
+raise the `?v=` number in `index.html`, `js/app.js` and `js/core.js` (it must be the same number everywhere).
 
 ## Run locally
 
