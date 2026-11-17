@@ -47,6 +47,9 @@ export const AIRPORTS = {
   YYC:['Calgary',51.123,-114.013,'America/Edmonton'], YYZ:['Toronto Pearson',43.677,-79.631,'America/Toronto']
 };
 
+AIRPORTS.GRB = ['Green Bay', 44.483, -88.131, 'America/Chicago'];
+AIRPORTS.PVD = ['Providence', 41.725, -71.426, 'America/New_York'];
+
 // Airports where each airline runs a hub or large base. Used to guess whether a nonstop is likely.
 export const AIRLINES = {
   AA:['American', ['DFW','CLT','ORD','PHL','MIA','PHX','DCA','LGA','JFK','LAX']],
@@ -293,3 +296,67 @@ export const NHL_ARENAS = {
   WPG:a('Canada Life Centre','Winnipeg',49.8928,-97.1436,'America/Winnipeg',2,[
     r('YWG',35,'A city bus downtown takes about 30 minutes. A rideshare is about 15. Bring your passport.')])
 };
+
+// ── NBA arenas and NFL stadiums, by ESPN home team abbreviation ──
+// `share` points at an NHL arena above when both teams play in the same building.
+const v = (level, routes) => ({ level, routes });
+export const NBA_VENUES = {
+  BOS:{ share:'BOS' }, CHI:{ share:'CHI' }, DAL:{ share:'DAL' }, DEN:{ share:'COL' }, DET:{ share:'DET' }, LAL:{ share:'LAK' },
+  NY:{ share:'NYR' }, NYK:{ share:'NYR' }, PHI:{ share:'PHI' }, TOR:{ share:'TOR' }, WSH:{ share:'WSH' }, UTAH:{ share:'UTA' }, UTA:{ share:'UTA' },
+  ATL:v(4,[r('ATL',30,'MARTA Red or Gold Line to Five Points, then one stop west on the Blue or Green Line to the arena.')]),
+  BKN:v(4,[r('JFK',45,'AirTrain to Jamaica, then the LIRR to Atlantic Terminal, across the street from the arena.'),
+    r('LGA',55,'Q70 bus to Jackson Heights, then the subway to Atlantic Av-Barclays Center.'),
+    r('EWR',70,'NJ Transit to Penn Station, then the 2 or 3 train to Atlantic Av-Barclays Center.')]),
+  CHA:v(3,[r('CLT',30,'Sprinter bus 5 to uptown, about 25 minutes. The transit center is next door to the arena.')]),
+  CLE:v(4,[r('CLE',35,'RTA Red Line from inside the terminal to Tower City, then a covered walkway to the arena.')]),
+  GS:v(3,[r('SFO',60,'BART to Powell St, then the Muni T Third line to UCSF/Chase Center.'), r('OAK',65,'BART to Powell St, then the Muni T Third line to UCSF/Chase Center.')]),
+  HOU:v(2,[r('HOU',50,'METRO bus 40 to downtown, then a 10 minute walk.'), r('IAH',80,'METRO bus 102 to downtown, then a 10 minute walk. A rideshare is about 30 minutes.')]),
+  IND:v(2,[r('IND',45,'IndyGo route 8 to the downtown transit center, then a five minute walk. A rideshare is about 20 minutes.')]),
+  LAC:v(2,[r('LAX',15,'The arena is three miles from the terminals. A rideshare is 10 to 15 minutes.')]),
+  MEM:v(2,[r('MEM',20,'A rideshare is about 15 minutes. The arena is downtown, on Beale Street.')]),
+  MIA:v(4,[r('MIA',35,'Metrorail Orange Line to Government Center, then the free Metromover or a 10 minute walk.'), r('FLL',40,'A rideshare is about 35 minutes.')]),
+  MIL:v(2,[r('MKE',40,'A bus to downtown takes about 30 minutes, then a 10 minute walk. A rideshare is about 15 minutes.')]),
+  MIN:v(4,[r('MSP',30,'Metro Blue Line to Warehouse District/Hennepin Av, a block from the arena.')]),
+  NO:v(2,[r('MSY',45,'RTA 202 Airport Express to downtown, then a 10 minute walk. A rideshare is about 25 minutes.')]),
+  OKC:v(2,[r('OKC',20,'A rideshare is about 15 minutes. Bus service from the airport is limited.')]),
+  ORL:v(2,[r('MCO',50,'A Lynx bus to downtown takes about 50 minutes. A rideshare is 20 to 25 minutes.')]),
+  PHX:v(4,[r('PHX',30,'Free PHX Sky Train to 44th St, then Valley Metro Rail to 3rd St, at the arena.')]),
+  POR:v(4,[r('PDX',30,'MAX Red Line from the terminal to Rose Quarter, at the arena.')]),
+  SAC:v(2,[r('SMF',40,'Yolobus 42 to downtown, about hourly, then a five minute walk. A rideshare is about 15 minutes.')]),
+  SA:v(2,[r('SAT',20,'A rideshare is about 15 minutes.')])
+};
+NBA_VENUES.GSW = NBA_VENUES.GS; NBA_VENUES.NOP = NBA_VENUES.NO; NBA_VENUES.SAS = NBA_VENUES.SA;
+
+export const NFL_VENUES = {
+  ARI:v(1,[r('PHX',30,'The stadium is in Glendale, 20 miles from the airport. A rideshare is 25 to 30 minutes.')]),
+  ATL:v(4,[r('ATL',30,'MARTA Red or Gold Line to Five Points, then one stop west on the Blue or Green Line.')]),
+  BAL:v(4,[r('BWI',30,'Light RailLink from the terminal to Stadium/Federal Hill, beside the stadium.')]),
+  BUF:v(1,[r('BUF',30,'The stadium is in Orchard Park. A rideshare is about 25 minutes.')]),
+  CAR:v(3,[r('CLT',35,'Sprinter bus 5 to uptown, about 25 minutes, then a 10 minute walk.')]),
+  CHI:v(3,[r('MDW',45,'Orange Line to Roosevelt, then a 15 to 20 minute walk east.'), r('ORD',75,'Blue Line to Jackson, Red Line to Roosevelt, then a 15 to 20 minute walk east.')]),
+  CIN:v(2,[r('CVG',50,'TANK Airport Express bus to downtown, about hourly, then a 10 minute walk.')]),
+  CLE:v(3,[r('CLE',45,'RTA Red Line to Tower City, then the Waterfront Line or a 15 minute walk.')]),
+  DAL:v(1,[r('DFW',25,'Arlington has no bus or rail to the stadium. A rideshare is about 20 minutes.'), r('DAL',35,'A rideshare is about 30 minutes.')]),
+  DEN:v(4,[r('DEN',60,'RTD A Line to Union Station, then the E or W light rail to the stadium.')]),
+  DET:v(2,[r('DTW',55,'DAX express bus to downtown Detroit, about hourly, then a 10 minute walk.')]),
+  GB:v(2,[r('GRB',10,'The stadium is three miles from the terminal. A rideshare is under 10 minutes.'), r('MKE',120,'Rent a car; about two hours north on I-43.')]),
+  HOU:v(2,[r('HOU',25,'A rideshare is about 20 minutes. By transit, bus 40 to downtown and the Red Line south takes about 80.'), r('IAH',45,'A rideshare is about 40 minutes.')]),
+  IND:v(2,[r('IND',45,'IndyGo route 8 to downtown, then a 10 minute walk. A rideshare is about 20 minutes.')]),
+  JAX:v(1,[r('JAX',25,'A rideshare is about 20 minutes. There is no useful transit from the airport.')]),
+  KC:v(1,[r('MCI',40,'Rent a car or take a rideshare, about 35 minutes.')]),
+  LV:v(2,[r('LAS',15,'The stadium is across the freeway from the Strip. A rideshare is about 10 minutes.')]),
+  LAC:v(2,[r('LAX',15,'The stadium is three miles from the terminals. A rideshare is 10 to 15 minutes.')]),
+  MIA:v(1,[r('FLL',30,'The stadium is in Miami Gardens. A rideshare is about 25 minutes.'), r('MIA',30,'A rideshare is about 25 minutes.')]),
+  MIN:v(4,[r('MSP',25,'Metro Blue Line from either terminal to U.S. Bank Stadium station.')]),
+  NE:v(1,[r('BOS',60,'A game-day commuter train runs from South Station; otherwise it is a 45 to 60 minute drive.'), r('PVD',40,'A rideshare is about 35 minutes.')]),
+  NO:v(2,[r('MSY',45,'RTA 202 Airport Express to downtown, then a 10 minute walk. A rideshare is about 25 minutes.')]),
+  NYG:v(3,[r('EWR',50,'AirTrain to the airport rail station, NJ Transit to Secaucus, then the game-day Meadowlands train.'), r('LGA',90,'Bus and subway to Penn Station, NJ Transit to Secaucus, then the game-day Meadowlands train.')]),
+  PHI:v(3,[r('PHL',55,'SEPTA Airport Line to Jefferson or Suburban Station, then the Broad Street Line south to NRG station. The stadium is 10 minutes from the airport by car.')]),
+  PIT:v(2,[r('PIT',60,'28X Airport Flyer bus to downtown, then the free T under the river to Allegheny station.')]),
+  SF:v(2,[r('SJC',15,'The stadium is in Santa Clara, five miles from San Jose airport. A rideshare is about 10 minutes.'), r('SFO',100,'Caltrain to Mountain View, then VTA light rail to Great America.')]),
+  SEA:v(4,[r('SEA',40,'Link 1 Line to Stadium station, then a five minute walk.')]),
+  TB:v(2,[r('TPA',15,'The stadium is four miles from the terminal. A rideshare is about 10 minutes.')]),
+  TEN:v(2,[r('BNA',55,'WeGo bus 18 to downtown, then a 15 minute walk across the pedestrian bridge. A rideshare is about 15 minutes.')]),
+  WSH:v(3,[r('DCA',55,'Metro Blue Line toward Largo to Morgan Boulevard, then a 20 minute walk.'), r('BWI',40,'A rideshare is about 35 minutes.')])
+};
+NFL_VENUES.LAR = NFL_VENUES.LAC; NFL_VENUES.NYJ = NFL_VENUES.NYG; NFL_VENUES.LA = NFL_VENUES.LAC; NFL_VENUES.WAS = NFL_VENUES.WSH;

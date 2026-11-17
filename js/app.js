@@ -1,16 +1,16 @@
-import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=5';
+import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=6';
 import {
   todayStr, addDays, clock, pad, OFFSETS,
-  loadBaseball, loadHockey, nextBaseballDate, nextHockeyDate, nhlUpdated,
+  loadBaseball, loadHockey, nextBaseballDate, nextHockeyDate, nhlUpdated, loadEspn, nextEspnDate,
   attachWeather, attachPrices, scoreGame, DEPLANE, weatherGrade, skyOf, findPairs, ticketLinks, TRIP_LABEL
-} from './core.js?v=5';
+} from './core.js?v=6';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // ───────── State ─────────
 const DEFAULTS = {
-  sports: ['mlb', 'aaa', 'nhl'], span: 3, sort: 'best',
+  sports: ['mlb', 'aaa', 'nhl', 'nba', 'nfl', 'cfb'], knownSports: ['mlb', 'aaa', 'nhl', 'nba', 'nfl', 'cfb'], span: 3, sort: 'best',
   minTemp: 10, maxTemp: 115, maxRain: 100, coverPass: true, transit: 1, trip: 'any', maxPrice: 300, savedOnly: false,
   home: '', airline: '', stops: true, earliest: 360, latest: 1260, cushion: 45, sgKey: ''
 };
@@ -18,12 +18,20 @@ let prefs = { ...DEFAULTS };
 let saved = new Set();
 let anchor = todayStr();
 let games = [], pairs = [], open = new Set();
-let query = '', loadSeq = 0, state = 'loading', nextDate = null, priceInfo = null, errors = [];
+let query = '', loadSeq = 0, state = 'loading', nextDate = null, priceInfo = null, errors = [], weatherDone = false;
 
+let storedKnown = null;
 try {
   const s = JSON.parse(localStorage.getItem('diamondWeather3') || 'null');
-  if (s) { prefs = { ...DEFAULTS, ...s.prefs }; saved = new Set(s.saved || []); }
+  if (s) { prefs = { ...DEFAULTS, ...s.prefs }; saved = new Set(s.saved || []); storedKnown = s.prefs?.knownSports || ['mlb', 'aaa', 'nhl']; }
 } catch { /* storage unavailable: run with defaults */ }
+// Sports added since this browser last visited start switched on
+if (storedKnown) {
+  const known = storedKnown;
+  const added = DEFAULTS.knownSports.filter(x => !known.includes(x));
+  prefs.sports = [...prefs.sports, ...added.filter(x => !prefs.sports.includes(x))];
+  prefs.knownSports = DEFAULTS.knownSports;
+}
 // A home airport outside the venue list carries its own details, saved when it was picked
 if (prefs.home && !AIRPORTS[prefs.home]) {
   if (Array.isArray(prefs.homeInfo)) AIRPORTS[prefs.home] = prefs.homeInfo;
@@ -38,7 +46,9 @@ function niceDate(s, opts) {
 }
 const shortDate = s => niceDate(s, { weekday: 'short', month: 'short', day: 'numeric' });
 const dur = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${pad(m % 60)} min`;
-const SPORT_NAME = { mlb: 'MLB', aaa: 'Triple-A', nhl: 'NHL' };
+const SPORT_NAME = { mlb: 'MLB', aaa: 'Triple-A', nhl: 'NHL', nba: 'NBA', nfl: 'NFL', cfb: 'College football' };
+const START_WORD = { mlb: 'first pitch', aaa: 'first pitch', nhl: 'puck drop', nba: 'tip-off', nfl: 'kickoff', cfb: 'kickoff' };
+const PLACE_WORD = { mlb: 'ballpark', aaa: 'ballpark', nhl: 'arena', nba: 'arena', nfl: 'stadium', cfb: 'stadium' };
 
 const ICON = {
   clear: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3 7 7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/>',
@@ -56,35 +66,38 @@ const icon = (name, size = 22) => `<svg viewBox="0 0 24 24" width="${size}" heig
 const chev = '<svg class="chev" viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="m6 9.5 6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 
 // ───────── Loading ─────────
+const SOURCES = [
+  { label: 'Baseball', sports: ['mlb', 'aaa'], load: (a, b) => loadBaseball(a, b, prefs.sports), next: e => nextBaseballDate(e, prefs.sports) },
+  { label: 'NHL', sports: ['nhl'], load: loadHockey, next: async e => nextHockeyDate(e) },
+  { label: 'NBA', sports: ['nba'], load: (a, b) => loadEspn('nba', a, b), next: e => nextEspnDate('nba', e) },
+  { label: 'NFL', sports: ['nfl'], load: (a, b) => loadEspn('nfl', a, b), next: e => nextEspnDate('nfl', e) },
+  { label: 'College football', sports: ['cfb'], load: (a, b) => loadEspn('cfb', a, b), next: e => nextEspnDate('cfb', e) }
+];
 async function load() {
   const seq = ++loadSeq;
-  state = 'loading'; errors = []; nextDate = null; priceInfo = null;
+  state = 'loading'; errors = []; nextDate = null; priceInfo = null; weatherDone = false;
   render();
   const start = anchor, end = addDays(anchor, prefs.span - 1);
-  const wantBall = prefs.sports.some(s => s !== 'nhl'), wantNhl = prefs.sports.includes('nhl');
-  const [ball, puck] = await Promise.all([
-    wantBall ? loadBaseball(start, end, prefs.sports).catch(e => { errors.push('baseball'); console.error(e); return []; }) : [],
-    wantNhl ? loadHockey(start, end).catch(e => { errors.push('hockey'); console.error(e); return []; }) : []
-  ]);
+  const sources = SOURCES.filter(x => x.sports.some(sp => prefs.sports.includes(sp)));
+  const lists = await Promise.all(sources.map(x =>
+    x.load(start, end).catch(e => { errors.push(x.label); console.error(e); return []; })));
   if (seq !== loadSeq) return;
-  games = [...ball, ...puck];
+  games = lists.flat().filter(g => prefs.sports.includes(g.sport));
   if (!games.length) {
-    if (errors.length === (wantBall ? 1 : 0) + (wantNhl ? 1 : 0) && errors.length) { state = 'error'; render(); return; }
-    const cands = await Promise.all([
-      wantBall ? nextBaseballDate(end, prefs.sports).catch(() => null) : null,
-      wantNhl ? nextHockeyDate(end) : null
-    ]);
+    if (sources.length && errors.length === sources.length) { state = 'error'; render(); return; }
+    const cands = await Promise.all(sources.map(x => x.next(end).catch(() => null)));
     if (seq !== loadSeq) return;
     nextDate = cands.filter(Boolean).sort()[0] || null;
     state = 'ready'; render(); return;
   }
-  games.forEach(g => scoreGame(g, prefs));
+  rescore();
   state = 'ready'; render();           // show the schedule right away, then fill in weather and prices
   await Promise.all([
     attachWeather(games, start, end).catch(e => { errors.push('weather'); console.error(e); }),
     attachPrices(games, start, end, prefs.sgKey).then(r => { priceInfo = r; }).catch(() => { priceInfo = { ok: false, reason: 'failed' }; })
   ]);
   if (seq !== loadSeq) return;
+  weatherDone = true;
   rescore(); render();
 }
 function rescore() { games.forEach(g => scoreGame(g, prefs)); pairs = findPairs(games.filter(passes)); }
@@ -124,7 +137,8 @@ function passes(g) {
 // ───────── Card pieces ─────────
 function weatherFact(g) {
   const gr = weatherGrade(g), w = g.wx;
-  if (!w) return `<div class="fact"><div class="k">${icon('none')} No forecast yet</div><div class="s">Check back closer to the game</div></div>`;
+  if (!w && errors.includes('weather')) return `<div class="fact"><div class="k">${icon('none')} Forecast didn't load</div><div class="s">Refresh to try again</div></div>`;
+  if (!w) return `<div class="fact"><div class="k">${icon('none')} ${state === 'ready' && !weatherDone ? 'Loading forecast' : 'No forecast yet'}</div><div class="s">${state === 'ready' && !weatherDone ? 'One moment' : 'Check back closer to the game'}</div></div>`;
   if (w.bare) return `<div class="fact"><div class="k">${icon('indoor')} ${g.indoor ? 'Indoors' : esc(g.roof)}</div><div class="s">Plays in any weather</div></div>`;
   const typ = g.wxSrc === 'typical';
   const sub = g.indoor ? `Indoors, ${w.pop}% rain outside` : `${typ ? 'Typical' : gr.word}, ${w.pop}% rain${g.roof ? ', roof' : ''}`;
@@ -134,10 +148,10 @@ function transitFact(g) {
   if (!g.info) return `<div class="fact"><div class="k"><span class="dot"></span> No transit notes</div><div class="s">Not a regular home venue</div></div>`;
   const r = g.trip ? g.info.routes.find(x => x.a === g.trip.airport) || g.info.routes[0] : g.info.routes[0];
   const more = g.info.routes.length - 1;
-  return `<div class="fact"><div class="k"><span class="dot g${g.level}"></span> ${TRANSIT_LABEL[g.level]}</div><div class="s">About ${r.mins} min from ${r.a}${more ? `, +${more} airport${more > 1 ? 's' : ''}` : ''}</div></div>`;
+  return `<div class="fact"><div class="k"><span class="dot g${g.level}"></span> ${g.info.drive ? (g.level >= 2 ? 'Short drive' : 'Plan on a car') : TRANSIT_LABEL[g.level]}</div><div class="s">About ${r.mins} min ${g.info.drive ? 'by car ' : ''}from ${r.a}${more ? `, +${more} airport${more > 1 ? 's' : ''}` : ''}</div></div>`;
 }
 const spare = m => m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : m === 60 ? '1 hour' : `${m / 60} hours`;
-const startWord = g => g.sport === 'nhl' ? 'puck drop' : 'first pitch';
+const startWord = g => START_WORD[g.sport] || 'the start';
 // The airport the trip estimate chose, or the first one in the notes
 function mainArrival(g) {
   if (!g.arrivals?.length) return null;
@@ -177,7 +191,7 @@ function hoursHTML(g) {
   }).join('');
   const cap = g.wxSrc === 'typical'
     ? 'Too far out for a forecast. This is what is typical for the week, averaged over the past three years.'
-    : `Shaded column is ${g.sport === 'nhl' ? 'puck drop' : 'first pitch'}. Bars show the chance of rain; wind is in mph.`;
+    : `Shaded column is ${startWord(g)}. Bars show the chance of rain; wind is in mph.`;
   return `<div class="hours">${cells}</div><p class="cap">${cap}</p>`;
 }
 function mapsLink(g, r) {
@@ -199,7 +213,7 @@ function planHTML(g) {
   const arr = mainArrival(g);
   if (!arr) return `<p class="hint">No airport notes for this venue, so there is no arrival time to aim for.</p>`;
   const tzOf = code => AIRPORTS[code][3];
-  const place = g.sport === 'nhl' ? 'arena' : 'ballpark';
+  const place = PLACE_WORD[g.sport] || 'venue';
   const li = [];
   if (g.tbd) li.push(`<li class="no"><span>The start time hasn't been announced. The times below assume a 7:00 PM start.</span></li>`);
   li.push(`<li class="yes"><span><b>Land at ${esc(AIRPORTS[arr.a][0])} (${arr.a}) by ${clock(arr.by, tzOf(arr.a))}.</b> That allows ${DEPLANE} min to get off the plane, about ${arr.mins} min to the ${place}, and ${spare(prefs.cushion)} to spare before ${startWord(g)} at ${clock(g.start, g.tz)}.</span></li>`);
@@ -241,11 +255,12 @@ function cardHTML(g, rank, showDate) {
         <div class="block"><h4>When to land</h4>${planHTML(g)}</div>
       </div>
       <div>
-        <div class="block"><h4>Airport to the ${g.sport === 'nhl' ? 'arena' : 'ballpark'}</h4>${routesHTML(g)}</div>
-        <div class="block"><h4>Tickets${g.price != null ? `, from $${g.price} on SeatGeek` : ''}</h4>
+        <div class="block"><h4>Airport to the ${PLACE_WORD[g.sport] || 'venue'}</h4>${routesHTML(g)}</div>
+        <div class="block"><h4>Tickets${g.price != null ? `, from $${g.price} on ${esc(g.priceSrc || 'SeatGeek')}` : ''}</h4>
           ${g.note ? `<p class="hint" style="margin-bottom:10px">${esc(g.note)}</p>` : ''}
           <div class="acts">
-            <a class="btn accent" href="${esc(t.seatgeek)}" target="_blank" rel="noopener">SeatGeek</a>
+            ${t.vivid ? `<a class="btn ${g.priceSrc === 'Vivid Seats' ? 'accent' : 'ghost'}" href="${esc(t.vivid)}" target="_blank" rel="noopener">Vivid Seats</a>` : ''}
+            <a class="btn ${g.priceSrc === 'Vivid Seats' ? 'ghost' : 'accent'}" href="${esc(t.seatgeek)}" target="_blank" rel="noopener">SeatGeek</a>
             <a class="btn ghost" href="${esc(t.stubhub)}" target="_blank" rel="noopener">StubHub</a>
             ${t.team ? `<a class="btn ghost" href="${esc(t.team)}" target="_blank" rel="noopener">Team box office</a>` : ''}
             <button class="btn ghost save" data-do="save" aria-pressed="${isSaved}" type="button">${isSaved ? 'Saved venue' : 'Save venue'}</button>
@@ -272,7 +287,7 @@ function pairsHTML() {
   return `<div class="pairs"><h3>Two games, one trip</h3><div class="pair-row">${pairs.map(p => {
     const leg = g => `<div class="leg"><time>${clock(g.start, g.tz)}</time><b>${esc(g.away.short)} at ${esc(g.home.short)}</b></div>`;
     const where = p.sameDay ? `${shortDate(p.a.date)}, same day` : `${shortDate(p.a.date)} and ${niceDate(p.b.date, { weekday: 'short' })}`;
-    const apart = p.a.venueKey === p.b.venueKey ? 'same venue' : p.dist < 1 ? 'next door' : `${Math.round(p.dist)} mi apart`;
+    const apart = p.a.venueKey === p.b.venueKey || p.a.venue === p.b.venue ? 'same venue' : p.dist < 1 ? 'next door' : `${Math.round(p.dist)} mi apart`;
     return `<button class="pair" type="button" data-do="pair" data-a="${p.a.id}" data-b="${p.b.id}">
       <span class="where">${esc(p.a.city && p.b.city && p.a.city !== p.b.city ? `${p.a.city} and ${p.b.city}` : (p.a.city || p.b.city))}, ${apart}</span><span class="where">${where}</span>${leg(p.a)}${leg(p.b)}</button>`;
   }).join('')}</div></div>`;
@@ -313,8 +328,8 @@ function render() {
   count.innerHTML = `<strong>${shown.length} game${shown.length === 1 ? '' : 's'}</strong>, ${esc(range)}${bySport && prefs.sports.length > 1 ? ` <span class="muted">(${bySport})</span>` : ''}`;
 
   const notes = [];
-  if (errors.includes('baseball')) notes.push(`<div class="note warn"><p>Baseball schedules didn't load. Showing what did.</p><button class="link" data-do="reload" type="button">Try again</button></div>`);
-  if (errors.includes('hockey')) notes.push(`<div class="note warn"><p>The NHL schedule didn't load. Showing what did.</p><button class="link" data-do="reload" type="button">Try again</button></div>`);
+  if (errors.includes('weather')) notes.push(`<div class="note warn"><p>Some forecasts didn't load. The weather service may be busy.</p><button class="link" data-do="reload" type="button">Try again</button></div>`);
+  for (const src of SOURCES) if (errors.includes(src.label)) notes.push(`<div class="note warn"><p>${src.label === 'Baseball' ? 'Baseball schedules' : `The ${src.label} schedule`} didn't load. Showing what did.</p><button class="link" data-do="reload" type="button">Try again</button></div>`);
   if (!prefs.home) notes.push(`<div class="note"><p>Add your home airport and airline to see which games you can fly to and from in a day.</p><button class="link" data-do="settings" type="button">Set home airport</button></div>`);
   if (prefs.sgKey && priceInfo && !priceInfo.ok) notes.push(`<div class="note warn"><p>Ticket prices didn't load. Check that your SeatGeek client ID is right.</p><button class="link" data-do="settings" type="button">Open settings</button></div>`);
   notice.innerHTML = notes.join('');
@@ -343,7 +358,7 @@ function render() {
   foot.innerHTML = `<p>Land-by times allow ${DEPLANE} minutes to get off the plane, the transit ride, and ${spare(prefs.cushion)} to spare before the start; change the spare time in Trip settings.</p>
     <p>The score blends weather, the airport-to-venue ride${prefs.home ? ' and how easy the flight is' : ''}. Weather looks at the hours you would be in your seat: comfort between 65 and 82°F, the highest rain chance, wind and storms. Indoor and roofed venues are mostly shielded from it.</p>
     <p>Transit times are estimates without checked bags, written by hand; service thins out late, so check the last train before a night game. All times are local to the venue.</p>
-    <p>Schedules from MLB and the NHL${upd ? ` (NHL refreshed ${new Date(upd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})` : ''}, weather from Open-Meteo${hasPrices() ? ', prices from SeatGeek' : ''}.</p>`;
+    <p>Schedules from MLB, the NHL and ESPN${upd ? ` (NHL refreshed ${new Date(upd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})` : ''}, weather from Open-Meteo${hasPrices() ? `, prices from ${[...new Set(games.filter(g => g.price != null).map(g => g.priceSrc || 'SeatGeek'))].join(' and ')}` : ''}. College football covers the top division (FBS).</p>`;
 }
 
 function syncControls() {
@@ -362,7 +377,7 @@ function syncControls() {
   $('stops').checked = prefs.stops; $('coverPass').checked = prefs.coverPass; $('savedOnly').checked = prefs.savedOnly;
   $('savedCount').textContent = saved.size ? `(${saved.size})` : '';
   const air = AIRLINES[prefs.airline]?.[0];
-  $('tripBtnText').textContent = prefs.home ? `From ${prefs.home}${air ? ` on ${air}` : ''}` : 'Set your home airport';
+  $('tripBtnText').innerHTML = prefs.home ? `From ${prefs.home}${air ? `<span class="wide"> on ${esc(air)}</span>` : ''}` : 'Home airport';
   $('tripHint').innerHTML = prefs.home
     ? `Flying from ${prefs.home}${air ? ` on ${esc(air)}` : ''}. Trip labels are estimates from distance, not airline schedules.`
     : 'Set your home airport to filter by trip length.';
@@ -445,7 +460,7 @@ $('cushionIn').innerHTML = [30, 45, 60, 90, 120].map(m => `<option value="${m}">
 // Home airport picker: a searchable list of every airport with airline service
 let airportDb = null, airportLoad = null, pick = null, matches = [], hi = -1;
 function loadAirports() {
-  airportLoad ||= fetch('data/airports.json?v=5')
+  airportLoad ||= fetch('data/airports.json?v=6')
     .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
     .then(d => {
       airportDb = d.list.map(a => ({

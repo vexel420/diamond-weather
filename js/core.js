@@ -1,5 +1,5 @@
 // Loading games, weather, ticket prices, and working out scores and trips. No DOM in this file.
-import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS } from './data.js?v=5';
+import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS, NBA_VENUES, NFL_VENUES } from './data.js?v=6';
 
 // ───────── Dates and time zones ─────────
 export const pad = n => String(n).padStart(2, '0');
@@ -113,6 +113,150 @@ export function nextHockeyDate(after) {
   return g ? dateInZone(new Date(g.start).getTime(), NHL_ARENAS[g.home]?.tz || 'America/New_York') : null;
 }
 
+// ───────── NBA, NFL and college football (ESPN) ─────────
+const ESPN = 'https://site.api.espn.com/apis/site/v2/sports';
+const ESPN_PATH = { nba: 'basketball/nba', nfl: 'football/nfl', cfb: 'football/college-football' };
+const ESPN_EXTRA = { cfb: '&groups=80&limit=300' };          // groups=80 is the top division (FBS)
+const GAME_HOURS = { nba: 2.5, nfl: 3.25, cfb: 3.5 };
+export const ESPN_SPORTS = Object.keys(ESPN_PATH);
+
+// Where each venue is and its nearest airports, saved by scripts/build-venues.mjs
+let venueDb = null;
+async function venueTable() {
+  if (!venueDb) {
+    venueDb = await getJSON('data/venues.json');
+    for (const [code, a] of Object.entries(venueDb.airports || {})) AIRPORTS[code] ||= a;
+  }
+  return venueDb;
+}
+
+// Venues without hand-written notes: the nearest airports and a drive estimate
+const driveMin = mi => Math.max(15, Math.round((15 + mi * 1.4) / 5) * 5);
+function driveInfo(near, city) {
+  const routes = near.filter(([c]) => AIRPORTS[c]).map(([c, mi]) => ({
+    a: c, mins: driveMin(mi),
+    how: `No transit notes for this venue yet. It is about ${mi} miles from ${AIRPORTS[c][0]}, so plan on a rideshare or a rental car${mi > 25 ? ' and allow extra time for game-day traffic' : ''}.`
+  }));
+  if (!routes.length) return null;
+  return { city, drive: true, level: near[0][1] <= 12 ? 2 : 1, routes };
+}
+
+// A venue missing from the saved table (a new stadium, a neutral-site or overseas game) is looked up by city
+let airportRows = null;
+const geoCache = new Map();
+const US_STATES = { AL:'Alabama', AK:'Alaska', AZ:'Arizona', AR:'Arkansas', CA:'California', CO:'Colorado', CT:'Connecticut', DE:'Delaware', DC:'District of Columbia', FL:'Florida', GA:'Georgia', HI:'Hawaii', ID:'Idaho', IL:'Illinois', IN:'Indiana', IA:'Iowa', KS:'Kansas', KY:'Kentucky', LA:'Louisiana', ME:'Maine', MD:'Maryland', MA:'Massachusetts', MI:'Michigan', MN:'Minnesota', MS:'Mississippi', MO:'Missouri', MT:'Montana', NE:'Nebraska', NV:'Nevada', NH:'New Hampshire', NJ:'New Jersey', NM:'New Mexico', NY:'New York', NC:'North Carolina', ND:'North Dakota', OH:'Ohio', OK:'Oklahoma', OR:'Oregon', PA:'Pennsylvania', RI:'Rhode Island', SC:'South Carolina', SD:'South Dakota', TN:'Tennessee', TX:'Texas', UT:'Utah', VT:'Vermont', VA:'Virginia', WA:'Washington', WV:'West Virginia', WI:'Wisconsin', WY:'Wyoming' };
+async function geocode(place) {
+  const us = !!US_STATES[place.state] && (!place.country || place.country === 'USA');
+  const d = await getJSON(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(place.city)}&count=10&language=en${us ? '&countryCode=US' : ''}`, 10000);
+  const hits = d.results || [];
+  const hit = (us && hits.find(h => h.admin1 === US_STATES[place.state])) || (!us && hits[0]) || null;
+  return hit ? { lat: hit.latitude, lon: hit.longitude, tz: hit.timezone } : null;
+}
+async function locateUnknown(list) {
+  const todo = list.filter(g => g.lat == null && g.place?.city);
+  if (!todo.length) return;
+  for (const g of todo) {
+    const key = `${g.place.city}|${g.place.state}|${g.place.country}`;
+    if (!geoCache.has(key)) geoCache.set(key, geocode(g.place).catch(() => null));
+    const loc = await geoCache.get(key);
+    if (!loc) continue;
+    g.lat = loc.lat; g.lon = loc.lon; g.tz = loc.tz || g.tz;
+    if (!g.info) {
+      airportRows ||= await getJSON('data/airports.json?v=6').then(d => d.list.map(a => [a[0], a[1], a[4], a[5], d.zones[a[6]]])).catch(() => []);
+      const near = airportRows.map(a => [a, miles(loc.lat, loc.lon, a[2], a[3])]).sort((x, y) => x[1] - y[1]).slice(0, 2);
+      for (const [a] of near) AIRPORTS[a[0]] ||= [a[1], a[2], a[3], a[4]];
+      g.info = driveInfo(near.map(([a, mi]) => [a[0], Math.round(mi)]), g.city);
+    }
+  }
+}
+
+export async function loadEspn(sport, start, end) {
+  const db = await venueTable();
+  const days = [];
+  for (let d = addDays(start, -1); d <= end; d = addDays(d, 1)) days.push(d); // the day before catches late games west of Eastern time
+  const pages = await Promise.all(days.map(d =>
+    getJSON(`${ESPN}/${ESPN_PATH[sport]}/scoreboard?dates=${d.replaceAll('-', '')}${ESPN_EXTRA[sport] || ''}`, 15000)));
+  const notesFor = sport === 'nba' ? NBA_VENUES : sport === 'nfl' ? NFL_VENUES : {};
+  const out = [], seen = new Set();
+  for (const page of pages) for (const e of page.events || []) {
+    if (seen.has(e.id)) continue;
+    seen.add(e.id);
+    const c = e.competitions?.[0];
+    const home = c?.competitors?.find(t => t.homeAway === 'home'), away = c?.competitors?.find(t => t.homeAway === 'away');
+    if (!home || !away) continue;
+    const v = c.venue || {}, addr = v.address || {};
+    const known = db.venues?.[String(v.id)];
+    const notes = notesFor[home.team.abbreviation];
+    const atHome = !!notes && !c.neutralSite;
+    const shared = atHome && notes.share ? NHL_ARENAS[notes.share] : null;
+    const city = shared?.city || addr.city || '';
+    let info = null;
+    if (shared) info = shared;
+    else if (atHome) info = { city, level: notes.level, routes: notes.routes };
+    else if (known) info = driveInfo(known[3], city);
+
+    const team = t => {
+      const rank = t.curatedRank?.current;
+      return {
+        name: t.team.displayName || t.team.name || t.team.abbreviation,
+        short: (rank && rank <= 25 ? `#${rank} ` : '') + ((sport === 'cfb' && t.team.location) || t.team.shortDisplayName || t.team.name || t.team.abbreviation),
+        logo: t.team.logo || '', record: t.records?.[0]?.summary || ''
+      };
+    };
+    const A = team(away), H = team(home);
+    const st = e.status?.type || {};
+    const headline = (c.notes?.[0]?.headline || '').replace(/\s+presented by.*$/i, '').trim();
+    const post = e.season?.type === 3;
+    const tk = c.tickets?.[0];
+    const priceMatch = tk?.summary?.match(/\$\s?([\d,]+(?:\.\d+)?)/);
+    const tixUrl = tk?.links?.[0]?.href || null;
+    out.push({
+      id: `e${e.id}`, sport, rawStart: new Date(e.date).getTime(), tbd: c.timeValid === false,
+      status: st.name === 'STATUS_SCHEDULED' ? '' : (st.description || ''),
+      label: headline.length && headline.length <= 34 ? headline : post ? (sport === 'cfb' ? 'Bowl game' : 'Playoffs') : (c.neutralSite ? 'Neutral site' : ''),
+      away: A, home: H,
+      venue: (shared?.name || v.fullName || 'Venue to be announced').replace(/\s*\([^)]*\)$/, ''),
+      venueKey: `e${v.id || e.id}`, city,
+      tz: shared?.tz || known?.[2] || 'America/New_York',
+      lat: shared ? shared.lat : known?.[0], lon: shared ? shared.lon : known?.[1],
+      place: { city: addr.city || '', state: addr.state || '', country: addr.country || '' },
+      info, indoor: sport === 'nba' || v.indoor === true, roof: '', hours: GAME_HOURS[sport],
+      note: A.record && H.record ? `Records: ${A.short} ${A.record}, ${H.short} ${H.record}` : '',
+      affiliate: '', teamLink: null,
+      price: priceMatch ? Math.round(parseFloat(priceMatch[1].replace(/,/g, ''))) : null,
+      priceSrc: priceMatch ? (/vividseats/i.test(tixUrl || '') ? 'Vivid Seats' : 'ESPN') : null,
+      vividUrl: /vividseats/i.test(tixUrl || '') ? tixUrl : null
+    });
+  }
+  await locateUnknown(out);
+  // Local date and start, now that every venue we could place has a time zone
+  for (const g of out) {
+    if (g.tbd) { g.date = dateInZone(g.rawStart, 'America/New_York'); g.start = zonedTime(g.date, 19 * 60, g.tz); }
+    else { g.start = g.rawStart; g.date = dateInZone(g.start, g.tz); }
+  }
+  return out.filter(g => g.date >= start && g.date <= end);
+}
+
+// The first day after `after` with games, from ESPN's season calendar
+export async function nextEspnDate(sport, after) {
+  const d = await getJSON(`${ESPN}/${ESPN_PATH[sport]}/scoreboard${ESPN_EXTRA[sport] ? '?' + ESPN_EXTRA[sport].slice(1) : ''}`, 15000);
+  const L = d.leagues?.[0];
+  if (!L) return null;
+  if (L.calendarType === 'day') {
+    return (L.calendar || []).map(x => String(x).slice(0, 10)).find(x => x > after) || null;
+  }
+  for (const section of L.calendar || []) {
+    if (/off ?season/i.test(section.label || '')) continue;
+    for (const wk of section.entries || []) {
+      if ((wk.endDate || '').slice(0, 10) <= after) continue;
+      const w = await getJSON(`${ESPN}/${ESPN_PATH[sport]}/scoreboard?dates=${L.season?.year}&seasontype=${section.value}&week=${wk.value}${ESPN_EXTRA[sport] || ''}`, 15000);
+      const day = (w.events || []).map(e => dateInZone(new Date(e.date).getTime(), 'America/New_York')).filter(x => x > after).sort()[0];
+      if (day) return day;
+    }
+  }
+  return null;
+}
+
 // ───────── Weather ─────────
 export const OFFSETS = [-2, -1, 0, 1, 2, 3, 4, 5];
 const hourMs = (g, off) => Math.floor(g.start / 3600000) * 3600000 + off * 3600000;
@@ -210,6 +354,7 @@ export async function attachWeather(list, start, end) {
       if (hrs[2]) { g.wxHours = hrs; g.wxSrc = 'typical'; }
     }
   });
+  if (list.some(g => g.lat != null && !g.wxHours)) throw new Error('Some weather did not load');
 }
 
 export function skyOf(h, indoor) {
@@ -377,9 +522,9 @@ export function findPairs(list) {
 }
 
 // ───────── Ticket prices (SeatGeek) ─────────
-const SG_TYPE = { mlb: 'mlb', aaa: 'minor_league_baseball', nhl: 'nhl' };
+const SG_TYPE = { mlb: 'mlb', aaa: 'minor_league_baseball', nhl: 'nhl', nba: 'nba', nfl: 'nfl', cfb: 'ncaa_football' };
 export async function attachPrices(list, start, end, clientId) {
-  for (const g of list) { g.price = null; g.priceUrl = null; }
+  for (const g of list) g.sgUrl = null;
   if (!clientId) return { ok: false, reason: 'nokey' };
   const sports = [...new Set(list.map(g => g.sport))];
   let matched = 0, failed = null;
@@ -402,9 +547,12 @@ export async function attachPrices(list, start, end, clientId) {
           if (gap < bestGap) { best = e; bestGap = gap; }
         }
         if (best) {
-          g.priceUrl = best.url || null;
+          g.sgUrl = best.url || null;
           const p = best.stats?.lowest_price;
-          if (p != null) { g.price = Math.round(p); matched++; }
+          if (p != null) {
+            matched++;
+            if (g.price == null || p < g.price) { g.price = Math.round(p); g.priceSrc = 'SeatGeek'; }
+          }
         }
       }
     } catch (e) { failed = e.message; }
@@ -415,7 +563,8 @@ export async function attachPrices(list, start, end, clientId) {
 export function ticketLinks(g) {
   const when = new Date(g.start).toLocaleDateString('en-US', { timeZone: g.tz, year: 'numeric', month: 'short', day: 'numeric' });
   return {
-    seatgeek: g.priceUrl || `https://seatgeek.com/search?q=${encodeURIComponent(`${g.away.name} at ${g.home.name}`)}`,
+    vivid: g.vividUrl || null,
+    seatgeek: g.sgUrl || `https://seatgeek.com/search?q=${encodeURIComponent(`${g.away.name} at ${g.home.name}`)}`,
     stubhub: `https://www.stubhub.com/find/s/?q=${encodeURIComponent(`${g.away.name} at ${g.home.name} ${when}`)}`,
     team: g.teamLink || null
   };
