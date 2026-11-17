@@ -1,0 +1,10 @@
+{
+  "name": "Diamond Weather",
+  "short_name": "Diamond Wx",
+  "description": "Pick the game by the weather, the ride in from the airport, and whether you can fly there and back in a day.",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ffffff",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any" }]
+}

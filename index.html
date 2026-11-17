@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Diamond Weather</title>
+<meta name="description" content="Pick the game by the weather, the ride in from the airport, and whether you can fly there and back in a day.">
+<meta name="theme-color" content="#ffffff">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="wrap top-in">
+    <a class="brand" href="./" aria-label="Diamond Weather">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 2.5 21.5 12 12 21.5 2.5 12Z" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.6" fill="currentColor"/></svg>
+      <span>Diamond Weather</span>
+    </a>
+    <button class="btn ghost" id="tripBtn" type="button">
+      <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true"><path d="M3 13.5 21 5l-4.5 15-4-6.5-6.5-2Z M12.5 13.5 21 5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" stroke-linecap="round"/></svg>
+      <span id="tripBtnText">Set your home airport</span>
+    </button>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="intro">
+    <h1>Find the game worth the flight.</h1>
+    <p>Every game ranked by its forecast, the ride in from the airport, and whether you can make it there and back in a day.</p>
+  </section>
+
+  <section class="bar" aria-label="What to show">
+    <div class="sports" id="sports" role="group" aria-label="Sports">
+      <button type="button" data-sport="mlb">MLB</button>
+      <button type="button" data-sport="aaa">Triple-A</button>
+      <button type="button" data-sport="nhl">NHL</button>
+    </div>
+    <div class="when">
+      <button class="icon-btn" id="prevBtn" type="button" aria-label="Earlier dates">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path d="m14.5 6-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <input type="date" id="dateIn" aria-label="Start date">
+      <button class="icon-btn" id="nextBtn" type="button" aria-label="Later dates">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path d="m9.5 6 6 6-6 6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="seg" id="spanSeg" role="group" aria-label="Number of days">
+        <button type="button" data-span="1">1 day</button><button type="button" data-span="3">3 days</button><button type="button" data-span="7">7 days</button>
+      </div>
+      <button class="btn quiet" id="todayBtn" type="button">Today</button>
+      <button class="btn quiet" id="weekendBtn" type="button">This weekend</button>
+    </div>
+  </section>
+
+  <div class="layout">
+    <aside class="rail" id="rail" aria-label="Filters">
+      <div class="rail-head">
+        <h2>Filters</h2>
+        <button class="link" id="resetBtn" type="button">Reset</button>
+      </div>
+
+      <fieldset>
+        <legend>Flights</legend>
+        <p class="hint" id="tripHint"></p>
+        <label class="switch"><input type="checkbox" id="stops"><span class="track"></span><span>Include one-stop flights</span></label>
+        <div class="seg full" id="tripSeg" role="group" aria-label="Trip length">
+          <button type="button" data-trip="any">Any</button><button type="button" data-trip="same">Fly in that day</button><button type="button" data-trip="day">Day trip</button>
+        </div>
+      </fieldset>
+
+      <fieldset>
+        <legend>Weather</legend>
+        <label class="range"><span>Coldest</span><input type="range" id="minTemp" min="10" max="90"><output id="minTempOut"></output></label>
+        <label class="range"><span>Hottest</span><input type="range" id="maxTemp" min="50" max="115"><output id="maxTempOut"></output></label>
+        <label class="range"><span>Rain chance</span><input type="range" id="maxRain" min="0" max="100" step="5"><output id="maxRainOut"></output></label>
+        <label class="check"><input type="checkbox" id="coverPass"><span>Roofed and indoor venues skip these</span></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Getting there from the airport</legend>
+        <div class="seg full" id="transitSeg" role="group" aria-label="Transit">
+          <button type="button" data-t="1">Any</button><button type="button" data-t="2">Doable</button><button type="button" data-t="3">Easy</button><button type="button" data-t="4">Train</button>
+        </div>
+      </fieldset>
+
+      <fieldset id="priceBox" hidden>
+        <legend>Ticket price</legend>
+        <label class="range"><span>Up to</span><input type="range" id="maxPrice" min="10" max="300" step="5"><output id="maxPriceOut"></output></label>
+      </fieldset>
+
+      <fieldset>
+        <legend>Find</legend>
+        <input type="search" id="q" class="field" placeholder="Team, venue or city" aria-label="Team, venue or city">
+        <label class="check"><input type="checkbox" id="savedOnly"><span>Only saved venues <span id="savedCount" class="muted"></span></span></label>
+      </fieldset>
+      <button class="btn primary rail-done" id="railDone" type="button">Show games</button>
+    </aside>
+
+    <section class="results" aria-live="polite">
+      <div class="results-head">
+        <p class="count" id="count"></p>
+        <div class="results-tools">
+          <button class="btn ghost filters-btn" id="filtersBtn" type="button">Filters <span id="filterBadge" class="badge" hidden></span></button>
+          <label class="sort">Rank by
+            <select id="sortSel">
+              <option value="best">Best overall</option>
+              <option value="wx">Weather</option>
+              <option value="transit">Transit</option>
+              <option value="trip">Easiest trip</option>
+              <option value="price">Lowest price</option>
+              <option value="time">Start time</option>
+            </select>
+          </label>
+        </div>
+      </div>
+      <div id="notice"></div>
+      <div id="pairs"></div>
+      <div id="list"></div>
+      <footer class="foot" id="foot" hidden></footer>
+    </section>
+  </div>
+</main>
+
+<dialog id="tripDlg" aria-labelledby="tripDlgTitle">
+  <form method="dialog" id="tripForm">
+    <div class="dlg-head">
+      <h2 id="tripDlgTitle">Trip settings</h2>
+      <button class="icon-btn" value="cancel" aria-label="Close" type="submit">
+        <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <p class="hint">Used to estimate whether you can fly in the day of the game and get home that night. Saved only in this browser.</p>
+    <label class="row"><span>Home airport</span>
+      <input class="field" id="homeIn" list="airportList" placeholder="ORD" autocomplete="off" autocapitalize="characters" maxlength="3">
+      <datalist id="airportList"></datalist>
+    </label>
+    <label class="row"><span>Airline you fly on</span>
+      <select class="field" id="airlineIn"><option value="">Any airline</option></select>
+    </label>
+    <div class="two">
+      <label class="row"><span>Earliest I'll take off</span><select class="field" id="earliestIn"></select></label>
+      <label class="row"><span>Last flight home leaves</span><select class="field" id="latestIn"></select></label>
+    </div>
+    <hr>
+    <label class="row"><span>SeatGeek client ID, for live ticket prices</span>
+      <input class="field" id="sgIn" placeholder="Paste your client ID" autocomplete="off" spellcheck="false">
+    </label>
+    <p class="hint">Free from <a href="https://seatgeek.com/account/develop" target="_blank" rel="noopener">seatgeek.com/account/develop</a>. Without it, each game still links to its listings.</p>
+    <div class="dlg-foot">
+      <button class="btn quiet" value="cancel" type="submit">Cancel</button>
+      <button class="btn primary" value="save" type="submit">Save settings</button>
+    </div>
+  </form>
+</dialog>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
