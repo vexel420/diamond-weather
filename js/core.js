@@ -1,5 +1,5 @@
 // Loading games, weather, ticket prices, and working out scores and trips. No DOM in this file.
-import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS, NBA_VENUES, NFL_VENUES } from './data.js?v=6';
+import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS, NBA_VENUES, NFL_VENUES } from './data.js?v=7';
 
 // ───────── Dates and time zones ─────────
 export const pad = n => String(n).padStart(2, '0');
@@ -118,7 +118,26 @@ const ESPN = 'https://site.api.espn.com/apis/site/v2/sports';
 const ESPN_PATH = { nba: 'basketball/nba', nfl: 'football/nfl', cfb: 'football/college-football' };
 const ESPN_EXTRA = { cfb: '&groups=80&limit=300' };          // groups=80 is the top division (FBS)
 const GAME_HOURS = { nba: 2.5, nfl: 3.25, cfb: 3.5 };
+// When the start time is unknown, plan around an early start: arriving early beats missing kickoff
+const ASSUMED_START = { nba: 19 * 60, nfl: 12 * 60, cfb: 12 * 60 };
+const ET = 'America/New_York';
+// ESPN sometimes sends a placeholder date (seen: January 1993). It still files each game under the right
+// day, so a date more than a day away from the day we asked for is treated as unknown.
+function espnStart(e, asked) {
+  const at = new Date(e.date).getTime();
+  const day = Number.isFinite(at) ? dateInZone(at, ET) : '';
+  const ok = day >= addDays(asked, -1) && day <= addDays(asked, 1);
+  return ok ? { at, lost: false } : { at: zonedTime(asked, 12 * 60, ET), lost: true };
+}
 export const ESPN_SPORTS = Object.keys(ESPN_PATH);
+
+// ESPN's "Tickets as low as $13" line, with the Vivid Seats link it points to
+function espnPrice(tk) {
+  const m = tk?.summary?.match(/\$\s?([\d,]+(?:\.\d+)?)/);
+  const url = tk?.links?.[0]?.href || null;
+  const vivid = /vividseats/i.test(url || '') ? url : null;
+  return m ? { price: Math.round(parseFloat(m[1].replace(/,/g, ''))), priceSrc: vivid ? 'Vivid Seats' : 'ESPN', vividUrl: vivid } : { price: null, priceSrc: null, vividUrl: vivid };
+}
 
 // Where each venue is and its nearest airports, saved by scripts/build-venues.mjs
 let venueDb = null;
@@ -162,7 +181,7 @@ async function locateUnknown(list) {
     if (!loc) continue;
     g.lat = loc.lat; g.lon = loc.lon; g.tz = loc.tz || g.tz;
     if (!g.info) {
-      airportRows ||= await getJSON('data/airports.json?v=6').then(d => d.list.map(a => [a[0], a[1], a[4], a[5], d.zones[a[6]]])).catch(() => []);
+      airportRows ||= await getJSON('data/airports.json?v=7').then(d => d.list.map(a => [a[0], a[1], a[4], a[5], d.zones[a[6]]])).catch(() => []);
       const near = airportRows.map(a => [a, miles(loc.lat, loc.lon, a[2], a[3])]).sort((x, y) => x[1] - y[1]).slice(0, 2);
       for (const [a] of near) AIRPORTS[a[0]] ||= [a[1], a[2], a[3], a[4]];
       g.info = driveInfo(near.map(([a, mi]) => [a[0], Math.round(mi)]), g.city);
@@ -178,7 +197,7 @@ export async function loadEspn(sport, start, end) {
     getJSON(`${ESPN}/${ESPN_PATH[sport]}/scoreboard?dates=${d.replaceAll('-', '')}${ESPN_EXTRA[sport] || ''}`, 15000)));
   const notesFor = sport === 'nba' ? NBA_VENUES : sport === 'nfl' ? NFL_VENUES : {};
   const out = [], seen = new Set();
-  for (const page of pages) for (const e of page.events || []) {
+  for (const [pi, page] of pages.entries()) for (const e of page.events || []) {
     if (seen.has(e.id)) continue;
     seen.add(e.id);
     const c = e.competitions?.[0];
@@ -208,10 +227,8 @@ export async function loadEspn(sport, start, end) {
     const headline = (c.notes?.[0]?.headline || '').replace(/\s+presented by.*$/i, '').trim();
     const post = e.season?.type === 3;
     const tk = c.tickets?.[0];
-    const priceMatch = tk?.summary?.match(/\$\s?([\d,]+(?:\.\d+)?)/);
-    const tixUrl = tk?.links?.[0]?.href || null;
     out.push({
-      id: `e${e.id}`, sport, rawStart: new Date(e.date).getTime(), tbd: c.timeValid === false,
+      id: `e${e.id}`, sport, ...(when => ({ rawStart: when.at, timeLost: when.lost, tbd: c.timeValid === false || when.lost }))(espnStart(e, days[pi])),
       status: st.name === 'STATUS_SCHEDULED' ? '' : (st.description || ''),
       label: headline.length && headline.length <= 34 ? headline : post ? (sport === 'cfb' ? 'Bowl game' : 'Playoffs') : (c.neutralSite ? 'Neutral site' : ''),
       away: A, home: H,
@@ -223,18 +240,48 @@ export async function loadEspn(sport, start, end) {
       info, indoor: sport === 'nba' || v.indoor === true, roof: '', hours: GAME_HOURS[sport],
       note: A.record && H.record ? `Records: ${A.short} ${A.record}, ${H.short} ${H.record}` : '',
       affiliate: '', teamLink: null,
-      price: priceMatch ? Math.round(parseFloat(priceMatch[1].replace(/,/g, ''))) : null,
-      priceSrc: priceMatch ? (/vividseats/i.test(tixUrl || '') ? 'Vivid Seats' : 'ESPN') : null,
-      vividUrl: /vividseats/i.test(tixUrl || '') ? tixUrl : null
+      ...espnPrice(tk)
     });
   }
   await locateUnknown(out);
   // Local date and start, now that every venue we could place has a time zone
   for (const g of out) {
-    if (g.tbd) { g.date = dateInZone(g.rawStart, 'America/New_York'); g.start = zonedTime(g.date, 19 * 60, g.tz); }
+    if (g.tbd) { g.date = dateInZone(g.rawStart, ET); g.start = zonedTime(g.date, ASSUMED_START[sport], g.tz); }
     else { g.start = g.rawStart; g.date = dateInZone(g.start, g.tz); }
   }
   return out.filter(g => g.date >= start && g.date <= end);
+}
+
+// Prices for NHL and MLB games: their schedules come from the leagues, so match each game to ESPN's
+// listing of it (same home team, closest start time) and take ESPN's "tickets from" price.
+const ESPN_PRICE_PATH = { nhl: 'hockey/nhl', mlb: 'baseball/mlb' };
+const plain = s => (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z]/g, '');
+const nickname = s => plain((s || '').trim().split(/\s+/).pop());
+export async function attachEspnPrices(list, start, end) {
+  const sports = Object.keys(ESPN_PRICE_PATH).filter(sp => list.some(g => g.sport === sp && g.price == null));
+  await Promise.all(sports.map(async sp => {
+    const days = [];
+    for (let d = addDays(start, -1); d <= end; d = addDays(d, 1)) days.push(d);
+    const pages = await Promise.all(days.map(d =>
+      getJSON(`${ESPN}/${ESPN_PRICE_PATH[sp]}/scoreboard?dates=${d.replaceAll('-', '')}`, 15000).catch(() => ({}))));
+    const events = pages.flatMap((p, i) => (p.events || []).map(e => {
+      const c = e.competitions?.[0];
+      return { ...espnStart(e, days[i]), day: days[i], home: c?.competitors?.find(t => t.homeAway === 'home')?.team?.displayName || '', tk: c?.tickets?.[0] };
+    })).filter(e => e.tk);
+    for (const g of list) {
+      if (g.sport !== sp || g.price != null) continue;
+      let best = null;
+      for (const e of events) {
+        // With a usable time, the closest start within 4 hours; without one, the same day
+        const gap = e.lost ? (dateInZone(g.start, ET) === e.day ? 0 : Infinity) : Math.abs(e.at - g.start);
+        if (gap > 4 * 3600000) continue;
+        const same = plain(e.home) === plain(g.home.name) ? 0 : nickname(e.home) === nickname(g.home.name) ? 1 : -1;
+        if (same < 0) continue;
+        if (!best || same < best.same || (same === best.same && gap < best.gap)) best = { e, same, gap };
+      }
+      if (best) Object.assign(g, espnPrice(best.e.tk));
+    }
+  }));
 }
 
 // The first day after `after` with games, from ESPN's season calendar

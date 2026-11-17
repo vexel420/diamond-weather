@@ -1,9 +1,9 @@
-import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=6';
+import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=7';
 import {
   todayStr, addDays, clock, pad, OFFSETS,
   loadBaseball, loadHockey, nextBaseballDate, nextHockeyDate, nhlUpdated, loadEspn, nextEspnDate,
-  attachWeather, attachPrices, scoreGame, DEPLANE, weatherGrade, skyOf, findPairs, ticketLinks, TRIP_LABEL
-} from './core.js?v=6';
+  attachWeather, attachPrices, attachEspnPrices, scoreGame, DEPLANE, weatherGrade, skyOf, findPairs, ticketLinks, TRIP_LABEL
+} from './core.js?v=7';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -93,8 +93,11 @@ async function load() {
   rescore();
   state = 'ready'; render();           // show the schedule right away, then fill in weather and prices
   await Promise.all([
-    attachWeather(games, start, end).catch(e => { errors.push('weather'); console.error(e); }),
-    attachPrices(games, start, end, prefs.sgKey).then(r => { priceInfo = r; }).catch(() => { priceInfo = { ok: false, reason: 'failed' }; })
+    attachWeather(games, start, end).catch(e => { errors.push('weather'); console.error(e); })
+      .then(() => { if (seq === loadSeq) { weatherDone = true; rescore(); render(); } }),
+    attachEspnPrices(games, start, end).catch(e => console.warn('ESPN prices unavailable', e))
+      .then(() => attachPrices(games, start, end, prefs.sgKey)).then(r => { priceInfo = r; }).catch(() => { priceInfo = { ok: false, reason: 'failed' }; })
+      .then(() => { if (seq === loadSeq) render(); })
   ]);
   if (seq !== loadSeq) return;
   weatherDone = true;
@@ -162,11 +165,11 @@ function tripFact(g) {
   if (!arr) return `<div class="fact"><div class="k"><span class="dot"></span> No arrival time</div><div class="s">No airport notes here</div></div>`;
   const by = clock(arr.by, AIRPORTS[arr.a][3]);
   const t = prefs.home ? g.trip : null;
-  if (!t) return `<div class="fact"><div class="k">Land by ${g.tbd ? 'time pending' : by}</div><div class="s">${g.tbd ? 'Start time not announced yet' : `at ${arr.a}, with ${spare(prefs.cushion)} to spare`}</div></div>`;
+  if (!t) return `<div class="fact"><div class="k">Land by ${g.tbd ? 'time pending' : by}</div><div class="s">${g.tbd ? 'Start time not confirmed' : `at ${arr.a}, with ${spare(prefs.cushion)} to spare`}</div></div>`;
   const tone = { local: 4, day: 4, same: 3, before: 2, none: 1 }[t.kind];
   let sub;
   if (t.kind === 'local') sub = 'No flight needed';
-  else if (g.tbd) sub = 'Start time not announced yet';
+  else if (g.tbd) sub = 'Start time not confirmed';
   else if (t.kind === 'none') sub = `Land at ${arr.a} by ${by}; no nonstop likely`;
   else sub = `Land at ${arr.a} by ${by}`;
   return `<div class="fact"><div class="k"><span class="dot g${tone}"></span> ${TRIP_LABEL[t.kind]}</div><div class="s">${esc(sub)}</div></div>`;
@@ -215,7 +218,7 @@ function planHTML(g) {
   const tzOf = code => AIRPORTS[code][3];
   const place = PLACE_WORD[g.sport] || 'venue';
   const li = [];
-  if (g.tbd) li.push(`<li class="no"><span>The start time hasn't been announced. The times below assume a 7:00 PM start.</span></li>`);
+  if (g.tbd) li.push(`<li class="no"><span>${g.timeLost ? `ESPN isn't giving the ${startWord(g)} time right now` : `The ${startWord(g)} time hasn't been announced`}, so these times assume ${clock(g.start, g.tz)}. Check the time before you book.</span></li>`);
   li.push(`<li class="yes"><span><b>Land at ${esc(AIRPORTS[arr.a][0])} (${arr.a}) by ${clock(arr.by, tzOf(arr.a))}.</b> That allows ${DEPLANE} min to get off the plane, about ${arr.mins} min to the ${place}, and ${spare(prefs.cushion)} to spare before ${startWord(g)} at ${clock(g.start, g.tz)}.</span></li>`);
   const others = g.arrivals.filter(x => x.a !== arr.a);
   if (others.length) li.push(`<li><span>Or land at ${others.map(o => `${o.a} by ${clock(o.by, tzOf(o.a))}`).join(', or ')}.</span></li>`);
@@ -247,7 +250,7 @@ function cardHTML(g, rank, showDate) {
   tags.push(`<span class="tag">${SPORT_NAME[g.sport]}</span>`);
   if (g.label) tags.push(`<span class="tag">${esc(g.label)}</span>`);
   if (g.status && !/^(scheduled|pre-game|warmup)$/i.test(g.status)) tags.push(`<span class="tag${off ? ' alert' : ''}">${esc(g.status)}</span>`);
-  const when = `${showDate ? `<b>${shortDate(g.date)}</b>` : ''}<b>${g.tbd ? 'Time to be announced' : clock(g.start, g.tz, true)}</b>`;
+  const when = `${showDate ? `<b>${shortDate(g.date)}</b>` : ''}<b>${g.tbd ? (g.timeLost ? `${startWord(g)[0].toUpperCase()}${startWord(g).slice(1)} time unavailable` : 'Time to be announced') : clock(g.start, g.tz, true)}</b>`;
   const t = ticketLinks(g);
   const detail = !isOpen ? '' : `<div class="detail">
       <div>
@@ -312,7 +315,7 @@ function render() {
   }
   if (!prefs.sports.length) {
     count.textContent = '';
-    list.innerHTML = `<div class="empty"><h3>Pick a sport</h3><p>Turn on MLB, Triple-A or NHL above to see games.</p></div>`;
+    list.innerHTML = `<div class="empty"><h3>Pick a sport</h3><p>Tap All, or turn on any sport above, to see games.</p></div>`;
     return;
   }
   if (!games.length) {
@@ -364,7 +367,8 @@ function render() {
 function syncControls() {
   $('dateIn').value = anchor;
   const press = (id, attr, val) => document.querySelectorAll(`#${id} button`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset[attr] === String(val))));
-  document.querySelectorAll('#sports button').forEach(b => b.setAttribute('aria-pressed', String(prefs.sports.includes(b.dataset.sport))));
+  document.querySelectorAll('#sports button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.sport === 'all'
+    ? DEFAULTS.knownSports.every(x => prefs.sports.includes(x)) : prefs.sports.includes(b.dataset.sport))));
   press('spanSeg', 'span', prefs.span); press('transitSeg', 't', prefs.transit); press('tripSeg', 'trip', prefs.home ? prefs.trip : 'any');
   document.querySelectorAll('#tripSeg button').forEach(b => { b.disabled = !prefs.home && b.dataset.trip !== 'any'; });
   const set = (id, v) => { const el = $(id); if (el.value !== String(v)) el.value = v; };
@@ -404,8 +408,9 @@ $('dateIn').onchange = e => setAnchor(e.target.value);
 $('spanSeg').onclick = e => { const b = e.target.closest('button'); if (b) { prefs.span = +b.dataset.span; store(); setAnchor(anchor); } };
 $('sports').onclick = e => {
   const b = e.target.closest('button'); if (!b) return;
-  const s = b.dataset.sport;
-  prefs.sports = prefs.sports.includes(s) ? prefs.sports.filter(x => x !== s) : [...prefs.sports, s];
+  const s = b.dataset.sport, all = DEFAULTS.knownSports;
+  if (s === 'all') prefs.sports = all.every(x => prefs.sports.includes(x)) ? [] : [...all];
+  else prefs.sports = prefs.sports.includes(s) ? prefs.sports.filter(x => x !== s) : [...prefs.sports, s];
   store(); setAnchor(anchor);
 };
 $('sortSel').onchange = e => { prefs.sort = e.target.value; store(); render(); };
@@ -460,7 +465,7 @@ $('cushionIn').innerHTML = [30, 45, 60, 90, 120].map(m => `<option value="${m}">
 // Home airport picker: a searchable list of every airport with airline service
 let airportDb = null, airportLoad = null, pick = null, matches = [], hi = -1;
 function loadAirports() {
-  airportLoad ||= fetch('data/airports.json?v=6')
+  airportLoad ||= fetch('data/airports.json?v=7')
     .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
     .then(d => {
       airportDb = d.list.map(a => ({
