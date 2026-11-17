@@ -1,5 +1,5 @@
 // Loading games, weather, ticket prices, and working out scores and trips. No DOM in this file.
-import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS, NBA_VENUES, NFL_VENUES } from './data.js?v=7';
+import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS, NBA_VENUES, NFL_VENUES } from './data.js?v=8';
 
 // ───────── Dates and time zones ─────────
 export const pad = n => String(n).padStart(2, '0');
@@ -181,7 +181,7 @@ async function locateUnknown(list) {
     if (!loc) continue;
     g.lat = loc.lat; g.lon = loc.lon; g.tz = loc.tz || g.tz;
     if (!g.info) {
-      airportRows ||= await getJSON('data/airports.json?v=7').then(d => d.list.map(a => [a[0], a[1], a[4], a[5], d.zones[a[6]]])).catch(() => []);
+      airportRows ||= await getJSON('data/airports.json?v=8').then(d => d.list.map(a => [a[0], a[1], a[4], a[5], d.zones[a[6]]])).catch(() => []);
       const near = airportRows.map(a => [a, miles(loc.lat, loc.lon, a[2], a[3])]).sort((x, y) => x[1] - y[1]).slice(0, 2);
       for (const [a] of near) AIRPORTS[a[0]] ||= [a[1], a[2], a[3], a[4]];
       g.info = driveInfo(near.map(([a, mi]) => [a[0], Math.round(mi)]), g.city);
@@ -266,14 +266,16 @@ export async function attachEspnPrices(list, start, end) {
       getJSON(`${ESPN}/${ESPN_PRICE_PATH[sp]}/scoreboard?dates=${d.replaceAll('-', '')}`, 15000).catch(() => ({}))));
     const events = pages.flatMap((p, i) => (p.events || []).map(e => {
       const c = e.competitions?.[0];
-      return { ...espnStart(e, days[i]), day: days[i], home: c?.competitors?.find(t => t.homeAway === 'home')?.team?.displayName || '', tk: c?.tickets?.[0] };
+      const when = espnStart(e, days[i]);
+      // Games without a set start time (ESPN marks them, and lists them at midnight) are matched by day
+      return { ...when, dayOnly: when.lost || c?.timeValid === false, day: days[i], home: c?.competitors?.find(t => t.homeAway === 'home')?.team?.displayName || '', tk: c?.tickets?.[0] };
     })).filter(e => e.tk);
     for (const g of list) {
       if (g.sport !== sp || g.price != null) continue;
       let best = null;
       for (const e of events) {
         // With a usable time, the closest start within 4 hours; without one, the same day
-        const gap = e.lost ? (dateInZone(g.start, ET) === e.day ? 0 : Infinity) : Math.abs(e.at - g.start);
+        const gap = e.dayOnly || g.tbd ? (dateInZone(g.start, ET) === e.day ? 0 : Infinity) : Math.abs(e.at - g.start);
         if (gap > 4 * 3600000) continue;
         const same = plain(e.home) === plain(g.home.name) ? 0 : nickname(e.home) === nickname(g.home.name) ? 1 : -1;
         if (same < 0) continue;
