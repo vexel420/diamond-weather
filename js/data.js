@@ -46,6 +46,51 @@ export const AIRPORTS = {
   YYC:['Calgary',51.123,-114.013,'America/Edmonton'], YYZ:['Toronto Pearson',43.677,-79.631,'America/Toronto']
 };
 
+// More home airports. None of these are used in the venue notes; they are here so you can fly from them.
+Object.assign(AIRPORTS, {
+  ALB:['Albany',42.748,-73.802,'America/New_York'], AMA:['Amarillo',35.219,-101.706,'America/Chicago'],
+  AVL:['Asheville',35.436,-82.542,'America/New_York'], BHM:['Birmingham',33.563,-86.753,'America/Chicago'],
+  BIL:['Billings',45.808,-108.543,'America/Denver'], BOI:['Boise',43.564,-116.223,'America/Boise'],
+  BTR:['Baton Rouge',30.533,-91.150,'America/Chicago'], BTV:['Burlington',44.472,-73.153,'America/New_York'],
+  BZN:['Bozeman',45.777,-111.153,'America/Denver'], CAE:['Columbia',33.939,-81.119,'America/New_York'],
+  CHA:['Chattanooga',35.035,-85.204,'America/New_York'], CID:['Cedar Rapids',41.885,-91.711,'America/Chicago'],
+  COS:['Colorado Springs',38.806,-104.701,'America/Denver'], CRW:['Charleston, WV',38.373,-81.593,'America/New_York'],
+  DAB:['Daytona Beach',29.180,-81.058,'America/New_York'], DAY:['Dayton',39.902,-84.219,'America/New_York'],
+  DLH:['Duluth',46.842,-92.194,'America/Chicago'], ECP:['Panama City',30.357,-85.796,'America/Chicago'],
+  EUG:['Eugene',44.125,-123.212,'America/Los_Angeles'], EVV:['Evansville',38.037,-87.532,'America/Chicago'],
+  EYW:['Key West',24.556,-81.760,'America/New_York'], FAI:['Fairbanks',64.815,-147.856,'America/Anchorage'],
+  FAR:['Fargo',46.921,-96.816,'America/Chicago'], FAT:['Fresno',36.776,-119.718,'America/Los_Angeles'],
+  FAY:['Fayetteville, NC',34.991,-78.880,'America/New_York'], FSD:['Sioux Falls',43.582,-96.742,'America/Chicago'],
+  FWA:['Fort Wayne',40.978,-85.195,'America/Indiana/Indianapolis'], GEG:['Spokane',47.620,-117.534,'America/Los_Angeles'],
+  GNV:['Gainesville',29.690,-82.272,'America/New_York'], GRB:['Green Bay',44.485,-88.130,'America/Chicago'],
+  GSO:['Greensboro',36.098,-79.937,'America/New_York'], GSP:['Greenville-Spartanburg',34.896,-82.219,'America/New_York'],
+  HPN:['Westchester County',41.067,-73.708,'America/New_York'], HSV:['Huntsville',34.637,-86.775,'America/Chicago'],
+  ICT:['Wichita',37.650,-97.433,'America/Chicago'], ILM:['Wilmington, NC',34.271,-77.903,'America/New_York'],
+  ISP:['Long Island MacArthur',40.795,-73.100,'America/New_York'], JAN:['Jackson',32.311,-90.076,'America/Chicago'],
+  JNU:['Juneau',58.355,-134.576,'America/Juneau'], KOA:['Kona',19.739,-156.046,'Pacific/Honolulu'],
+  LBB:['Lubbock',33.664,-101.823,'America/Chicago'], LEX:['Lexington',38.037,-84.606,'America/New_York'],
+  LGB:['Long Beach',33.818,-118.152,'America/Los_Angeles'], LIH:['Lihue',21.976,-159.339,'Pacific/Honolulu'],
+  LIT:['Little Rock',34.729,-92.224,'America/Chicago'], LNK:['Lincoln',40.851,-96.759,'America/Chicago'],
+  MAF:['Midland',31.943,-102.202,'America/Chicago'], MDT:['Harrisburg',40.194,-76.763,'America/New_York'],
+  MFR:['Medford',42.374,-122.873,'America/Los_Angeles'], MHT:['Manchester',42.933,-71.436,'America/New_York'],
+  MLB:['Melbourne, FL',28.103,-80.645,'America/New_York'], MLI:['Quad Cities',41.448,-90.508,'America/Chicago'],
+  MOB:['Mobile',30.691,-88.243,'America/Chicago'], MSN:['Madison',43.140,-89.337,'America/Chicago'],
+  MSO:['Missoula',46.916,-114.091,'America/Denver'], MYR:['Myrtle Beach',33.680,-78.928,'America/New_York'],
+  OGG:['Maui Kahului',20.899,-156.430,'Pacific/Honolulu'], ONT:['Ontario, CA',34.056,-117.601,'America/Los_Angeles'],
+  PBI:['West Palm Beach',26.683,-80.096,'America/New_York'], PIA:['Peoria',40.664,-89.693,'America/Chicago'],
+  PNS:['Pensacola',30.473,-87.187,'America/Chicago'], PSC:['Tri-Cities, WA',46.265,-119.119,'America/Los_Angeles'],
+  PSP:['Palm Springs',33.830,-116.507,'America/Los_Angeles'], PVD:['Providence',41.724,-71.428,'America/New_York'],
+  PWM:['Portland, ME',43.646,-70.309,'America/New_York'], RDM:['Redmond/Bend',44.254,-121.150,'America/Los_Angeles'],
+  ROA:['Roanoke',37.325,-79.975,'America/New_York'], SAV:['Savannah',32.127,-81.202,'America/New_York'],
+  SBA:['Santa Barbara',34.426,-119.840,'America/Los_Angeles'], SBN:['South Bend',41.709,-86.317,'America/Indiana/Indianapolis'],
+  SGF:['Springfield, MO',37.246,-93.389,'America/Chicago'], SHV:['Shreveport',32.447,-93.826,'America/Chicago'],
+  SJU:['San Juan',18.439,-66.002,'America/Puerto_Rico'], SRQ:['Sarasota',27.395,-82.554,'America/New_York'],
+  TLH:['Tallahassee',30.397,-84.350,'America/New_York'], TOL:['Toledo',41.587,-83.808,'America/New_York'],
+  TRI:['Tri-Cities, TN',36.475,-82.407,'America/New_York'], TYS:['Knoxville McGhee Tyson',35.811,-83.994,'America/New_York'],
+  VPS:['Destin-Fort Walton Beach',30.483,-86.525,'America/Chicago'], XNA:['Northwest Arkansas',36.282,-94.307,'America/Chicago'],
+  YHZ:['Halifax',44.881,-63.509,'America/Halifax'], YQB:['Quebec City',46.791,-71.393,'America/Toronto']
+});
+
 // Airports where each airline runs a hub or large base. Used to guess whether a nonstop is likely.
 export const AIRLINES = {
   AA:['American', ['DFW','CLT','ORD','PHL','MIA','PHX','DCA','LGA','JFK','LAX']],

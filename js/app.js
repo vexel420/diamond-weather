@@ -409,7 +409,7 @@ document.querySelector('.results').addEventListener('keydown', e => {
 
 // ───────── Trip settings ─────────
 const dlg = $('tripDlg');
-$('airportList').innerHTML = Object.entries(AIRPORTS).map(([c, a]) => `<option value="${c}">${esc(a[0])}</option>`).join('');
+$('airportList').innerHTML = Object.entries(AIRPORTS).sort((a, b) => a[0].localeCompare(b[0])).map(([c, a]) => `<option value="${c}">${esc(a[0])}</option>`).join('');
 $('airlineIn').insertAdjacentHTML('beforeend', Object.entries(AIRLINES).map(([c, a]) => `<option value="${c}">${esc(a[0])}</option>`).join(''));
 const timeOpts = (from, to) => { let s = ''; for (let m = from; m <= to; m += 30) s += `<option value="${m}">${fmtMin(m)}</option>`; return s; };
 $('earliestIn').innerHTML = timeOpts(300, 600);
@@ -427,7 +427,7 @@ $('tripForm').addEventListener('submit', e => {
   const home = $('homeIn').value.trim().toUpperCase();
   if (home && !AIRPORTS[home]) {
     e.preventDefault();
-    $('homeIn').setCustomValidity("That airport isn't in the list yet. Pick the closest one offered.");
+    $('homeIn').setCustomValidity("That code isn't in the list yet. Pick the nearest airport offered.");
     $('homeIn').reportValidity();
     return;
   }
