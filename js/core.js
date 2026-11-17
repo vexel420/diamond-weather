@@ -1,5 +1,5 @@
 // Loading games, weather, ticket prices, and working out scores and trips. No DOM in this file.
-import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS } from './data.js?v=4';
+import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS } from './data.js?v=5';
 
 // ───────── Dates and time zones ─────────
 export const pad = n => String(n).padStart(2, '0');
@@ -280,7 +280,12 @@ function flightMin(home, dest) {
   return { dist: d, mins: Math.max(50, Math.round((d / 470 * 60 + 38) * wind)) };
 }
 const STOP_MIN = 135;        // added by a connection: layover plus the detour
-const DEPLANE = 25, BUFFER = 30, EXIT = 15, CHECKIN = 45;
+export const DEPLANE = 25;   // gate to curb
+const EXIT = 15, CHECKIN = 45;
+
+// The latest you can land at an airport and still be in your seat with time to spare.
+// Built only from the game time and the transit notes, so it needs no flight data.
+export const landBy = (g, route, prefs) => g.start - (DEPLANE + route.mins + (prefs.cushion ?? 45)) * 60000;
 
 // kinds: local, day (out and back the same day), same (arrive the day of the game), before (go the day before), none
 export function planTrip(g, prefs) {
@@ -291,15 +296,15 @@ export function planTrip(g, prefs) {
   for (const route of g.info.routes) {
     const dest = AIRPORTS[route.a]; if (!dest) continue;
     if (route.a === prefs.home || miles(home[1], home[2], dest[1], dest[2]) < 60) {
-      opts.push({ kind: 'local', airport: route.a, rank: 5 });
+      opts.push({ kind: 'local', airport: route.a, rank: 5, arriveBy: landBy(g, route, prefs) });
       continue;
     }
     const out = flightMin(prefs.home, route.a), back = flightMin(route.a, prefs.home);
     const direct = nonstopLikely(prefs.home, route.a, prefs.airline);
     const earliest = zonedTime(g.date, prefs.earliest, home[3]);
     const latestHome = zonedTime(g.date, prefs.latest, dest[3]);
-    const ground = (DEPLANE + route.mins + BUFFER) * 60000;
-    const leaveBy = stop => g.start - ground - (out.mins + (stop ? STOP_MIN : 0)) * 60000;
+    const arriveBy = landBy(g, route, prefs);
+    const leaveBy = stop => arriveBy - (out.mins + (stop ? STOP_MIN : 0)) * 60000;
     const freeAt = g.start + (g.hours * 60 + EXIT + route.mins + CHECKIN) * 60000;
     const ways = [];
     if (direct) ways.push(false);
@@ -321,7 +326,7 @@ export function planTrip(g, prefs) {
     if (!best) best = { kind: 'none', airport: route.a, direct, rank: 0, dist: Math.round(out.dist) };
     best.nonstopBy = direct ? leaveBy(false) : null;
     best.stopBy = prefs.stops ? leaveBy(true) : null;
-    best.earliest = earliest; best.latestHome = latestHome; best.outMin = out.mins;
+    best.earliest = earliest; best.latestHome = latestHome; best.outMin = out.mins; best.arriveBy = arriveBy; best.freeAt = freeAt;
     opts.push(best);
   }
   opts.sort((x, y) => y.rank - x.rank);
@@ -334,6 +339,7 @@ export function scoreGame(g, prefs) {
   scoreWeather(g);
   g.level = g.info?.level || 0;
   g.transitScore = TRANSIT_SCORE[g.level];
+  g.arrivals = (g.info?.routes || []).filter(r => AIRPORTS[r.a]).map(r => ({ a: r.a, mins: r.mins, by: landBy(g, r, prefs) }));
   planTrip(g, prefs);
   g.tripScore = g.trip ? TRIP_SCORE[g.trip.kind] : null;
   g.best = g.tripScore == null

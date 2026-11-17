@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/styles.css?v=4">
+<link rel="stylesheet" href="css/styles.css?v=5">
 </head>
 <body>
 <header class="top">
@@ -133,7 +133,8 @@
         <svg viewBox="0 0 24 24" width="18" height="18"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
       </button>
     </div>
-    <p class="hint">Used to estimate whether you can fly in the day of the game and get home that night. Saved only in this browser.</p>
+    <p class="hint">Sets the land-by time for each game and estimates whether it works as a same-day trip. Saved only in this browser.</p>
+    <label class="row"><span>Time to spare before the game starts</span><select class="field" id="cushionIn"></select></label>
     <div class="row">
       <label for="homeIn">Home airport</label>
       <div class="combo">
@@ -150,7 +151,7 @@
       <select class="field" id="airlineIn"><option value="">Any airline</option></select>
     </label>
     <div class="two">
-      <label class="row"><span>Earliest I'll take off</span><select class="field" id="earliestIn"></select></label>
+      <label class="row"><span>Earliest I'll leave home</span><select class="field" id="earliestIn"></select></label>
       <label class="row"><span>Last flight home leaves</span><select class="field" id="latestIn"></select></label>
     </div>
     <hr>
@@ -165,6 +166,6 @@
   </form>
 </dialog>
 
-<script type="module" src="js/app.js?v=4"></script>
+<script type="module" src="js/app.js?v=5"></script>
 </body>
 </html>

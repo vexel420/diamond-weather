@@ -1,9 +1,9 @@
-import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=4';
+import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=5';
 import {
   todayStr, addDays, clock, pad, OFFSETS,
   loadBaseball, loadHockey, nextBaseballDate, nextHockeyDate, nhlUpdated,
-  attachWeather, attachPrices, scoreGame, weatherGrade, skyOf, findPairs, ticketLinks, TRIP_LABEL
-} from './core.js?v=4';
+  attachWeather, attachPrices, scoreGame, DEPLANE, weatherGrade, skyOf, findPairs, ticketLinks, TRIP_LABEL
+} from './core.js?v=5';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -12,7 +12,7 @@ const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': 
 const DEFAULTS = {
   sports: ['mlb', 'aaa', 'nhl'], span: 3, sort: 'best',
   minTemp: 10, maxTemp: 115, maxRain: 100, coverPass: true, transit: 1, trip: 'any', maxPrice: 300, savedOnly: false,
-  home: '', airline: '', stops: true, earliest: 360, latest: 1260, sgKey: ''
+  home: '', airline: '', stops: true, earliest: 360, latest: 1260, cushion: 45, sgKey: ''
 };
 let prefs = { ...DEFAULTS };
 let saved = new Set();
@@ -136,17 +136,25 @@ function transitFact(g) {
   const more = g.info.routes.length - 1;
   return `<div class="fact"><div class="k"><span class="dot g${g.level}"></span> ${TRANSIT_LABEL[g.level]}</div><div class="s">About ${r.mins} min from ${r.a}${more ? `, +${more} airport${more > 1 ? 's' : ''}` : ''}</div></div>`;
 }
+const spare = m => m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : m === 60 ? '1 hour' : `${m / 60} hours`;
+const startWord = g => g.sport === 'nhl' ? 'puck drop' : 'first pitch';
+// The airport the trip estimate chose, or the first one in the notes
+function mainArrival(g) {
+  if (!g.arrivals?.length) return null;
+  return (g.trip && g.arrivals.find(x => x.a === g.trip.airport)) || g.arrivals[0];
+}
 function tripFact(g) {
-  if (!prefs.home) return '';
-  const t = g.trip;
-  if (!t) return `<div class="fact"><div class="k"><span class="dot"></span> No estimate</div><div class="s">No airport notes here</div></div>`;
+  const arr = mainArrival(g);
+  if (!arr) return `<div class="fact"><div class="k"><span class="dot"></span> No arrival time</div><div class="s">No airport notes here</div></div>`;
+  const by = clock(arr.by, AIRPORTS[arr.a][3]);
+  const t = prefs.home ? g.trip : null;
+  if (!t) return `<div class="fact"><div class="k">Land by ${g.tbd ? 'time pending' : by}</div><div class="s">${g.tbd ? 'Start time not announced yet' : `at ${arr.a}, with ${spare(prefs.cushion)} to spare`}</div></div>`;
   const tone = { local: 4, day: 4, same: 3, before: 2, none: 1 }[t.kind];
-  const homeTz = AIRPORTS[prefs.home][3];
   let sub;
   if (t.kind === 'local') sub = 'No flight needed';
-  else if (t.kind === 'none') sub = 'Turn on one-stop flights';
-  else if (t.kind === 'before') sub = 'Morning flights land too late';
-  else sub = `Leave ${prefs.home} by ${clock(t.leaveBy, homeTz)}${t.stop ? ', one stop' : ''}`;
+  else if (g.tbd) sub = 'Start time not announced yet';
+  else if (t.kind === 'none') sub = `Land at ${arr.a} by ${by}; no nonstop likely`;
+  else sub = `Land at ${arr.a} by ${by}`;
   return `<div class="fact"><div class="k"><span class="dot g${tone}"></span> ${TRIP_LABEL[t.kind]}</div><div class="s">${esc(sub)}</div></div>`;
 }
 function priceFact(g) {
@@ -165,7 +173,7 @@ function hoursHTML(g) {
     return `<div class="hr${OFFSETS[i] === 0 ? ' first' : ''}">
       <span class="h">${t}</span>${icon(skyOf(h, false), 18)}<span class="t">${h.t}°</span>
       <span class="bar" title="${h.pop}% chance of rain"><i style="height:${h.pop}%"></i></span>
-      <span class="p${h.pop >= 30 ? ' wet' : ''}">${h.pop}%</span><span class="w">${h.wind} mph</span></div>`;
+      <span class="p${h.pop >= 30 ? ' wet' : ''}">${h.pop}%</span><span class="w">${h.wind}<i> mph</i></span></div>`;
   }).join('');
   const cap = g.wxSrc === 'typical'
     ? 'Too far out for a forecast. This is what is typical for the week, averaged over the past three years.'
@@ -178,29 +186,42 @@ function mapsLink(g, r) {
 }
 function routesHTML(g) {
   if (!g.info) return `<p class="hint">No transit notes for this venue. <a href="https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(g.venue)}" target="_blank" rel="noopener">Find it on the map</a></p>`;
-  return g.info.routes.map(r => `<div class="route">
+  return g.info.routes.map(r => {
+    const arr = g.arrivals?.find(x => x.a === r.a);
+    return `<div class="route">
     <h5>From ${esc(r.a)} <span>${esc(AIRPORTS[r.a]?.[0] || '')}, about ${r.mins} min</span></h5>
+    ${arr && !g.tbd ? `<p class="land">Land by ${clock(arr.by, AIRPORTS[r.a][3])}</p>` : ''}
     <p>${esc(r.how)}</p>
-    <a href="${mapsLink(g, r)}" target="_blank" rel="noopener">Live transit directions</a></div>`).join('');
+    <a href="${mapsLink(g, r)}" target="_blank" rel="noopener">Live transit directions</a></div>`;
+  }).join('');
 }
 function planHTML(g) {
-  if (!prefs.home) return `<p class="hint">Set your home airport to see whether you can fly in the day of the game and get home that night.</p><div class="acts"><button class="btn ghost" data-do="settings" type="button">Set home airport</button></div>`;
-  const t = g.trip;
-  if (!t) return `<p class="hint">No airport notes for this venue, so there is no flight estimate.</p>`;
-  if (t.kind === 'local') return `<p class="hint">${esc(t.airport)} is your home airport area. No flight needed.</p>`;
-  const homeTz = AIRPORTS[prefs.home][3], destTz = AIRPORTS[t.airport][3];
-  const air = AIRLINES[prefs.airline]?.[0];
+  const arr = mainArrival(g);
+  if (!arr) return `<p class="hint">No airport notes for this venue, so there is no arrival time to aim for.</p>`;
+  const tzOf = code => AIRPORTS[code][3];
+  const place = g.sport === 'nhl' ? 'arena' : 'ballpark';
   const li = [];
-  li.push(`<li><span><b>${prefs.home} to ${t.airport}</b>, ${t.dist.toLocaleString()} miles, about ${dur(t.outMin)} in the air nonstop.</span></li>`);
-  if (t.direct) li.push(`<li class="${t.nonstopBy >= t.earliest ? 'yes' : 'no'}"><span><b>Nonstop:</b> take off by ${clock(t.nonstopBy, homeTz)} to make ${g.sport === 'nhl' ? 'puck drop' : 'first pitch'}${t.nonstopBy < t.earliest ? ', earlier than you fly' : ''}.</span></li>`);
-  else li.push(`<li class="no"><span><b>Nonstop:</b> unlikely${air ? ` on ${esc(air)}` : ''}; neither airport is a hub.</span></li>`);
-  if (prefs.stops) li.push(`<li class="${t.stopBy >= t.earliest ? 'yes' : 'no'}"><span><b>One stop:</b> take off by ${clock(t.stopBy, homeTz)}${t.stopBy < t.earliest ? ', earlier than you fly' : ''}.</span></li>`);
-  else li.push(`<li><span><b>One stop:</b> turned off. <button class="link" data-do="stops" type="button">Include one-stop flights</button></span></li>`);
-  if (t.freeAt) {
-    const can = t.kind === 'day';
-    li.push(`<li class="${can ? 'yes' : 'no'}"><span><b>Getting home:</b> you could be back through security at ${t.airport} around ${clock(t.freeAt, destTz)}, ${can ? 'in time for' : 'too late for'} a ${clock(t.latestHome - (t.stop ? 7200000 : 0), destTz)} ${t.stop ? 'connection' : 'flight'}.</span></li>`);
+  if (g.tbd) li.push(`<li class="no"><span>The start time hasn't been announced. The times below assume a 7:00 PM start.</span></li>`);
+  li.push(`<li class="yes"><span><b>Land at ${esc(AIRPORTS[arr.a][0])} (${arr.a}) by ${clock(arr.by, tzOf(arr.a))}.</b> That allows ${DEPLANE} min to get off the plane, about ${arr.mins} min to the ${place}, and ${spare(prefs.cushion)} to spare before ${startWord(g)} at ${clock(g.start, g.tz)}.</span></li>`);
+  const others = g.arrivals.filter(x => x.a !== arr.a);
+  if (others.length) li.push(`<li><span>Or land at ${others.map(o => `${o.a} by ${clock(o.by, tzOf(o.a))}`).join(', or ')}.</span></li>`);
+  let extra = '';
+  const t = prefs.home ? g.trip : null;
+  if (!prefs.home) {
+    extra = `<div class="acts"><button class="btn ghost" data-do="settings" type="button">Set home airport</button></div>`;
+    li.push(`<li><span>Set your home airport to see whether that works as a same-day trip.</span></li>`);
+  } else if (t?.kind === 'local') {
+    li.push(`<li class="yes"><span>${esc(t.airport)} is in your home area. No flight needed.</span></li>`);
+  } else if (t) {
+    const air = AIRLINES[prefs.airline]?.[0], on = air ? ` on ${esc(air)}` : '';
+    li.push(`<li><span><b>From ${prefs.home}:</b> ${t.dist.toLocaleString()} miles, about ${dur(t.outMin)} in the air. ${t.direct ? `A nonstop is likely${on}.` : `A nonstop is unlikely${on}, so expect a connection.`}</span></li>`);
+    const back = `back through security at ${t.airport} around ${clock(t.freeAt, tzOf(t.airport))}`;
+    if (t.kind === 'day') li.push(`<li class="yes"><span><b>Works as a day trip${t.stop ? ', even with one stop' : ''}.</b> A morning departure should land in time, and you could be ${back} for a flight home.</span></li>`);
+    else if (t.kind === 'same') li.push(`<li class="yes"><span><b>You can fly in that day${t.stop ? ' with one stop' : ''}</b>, but not home the same night: you would be ${back}.</span></li>`);
+    else if (t.kind === 'before') li.push(`<li class="no"><span><b>Go the day before.</b> Leaving ${prefs.home} at ${fmtMin(prefs.earliest)} or later probably lands after ${clock(arr.by, tzOf(arr.a))}.</span></li>`);
+    else li.push(`<li class="no"><span><b>Needs a connection</b>, and one-stop flights are turned off. <button class="link" data-do="stops" type="button">Include one-stop flights</button></span></li>`);
   }
-  return `<div class="plan"><ul>${li.join('')}</ul><p class="cap">Estimated from distance and airline hub lists, not live schedules or seat loads. Check your airline before you go.</p></div>`;
+  return `<div class="plan"><ul>${li.join('')}</ul>${extra}<p class="cap">The land-by time comes from the game time and the transit notes. Flight lengths are estimated from distance. This site has no live airline schedules or seat loads, so check your airline for flights that land in time.</p></div>`;
 }
 
 function cardHTML(g, rank, showDate) {
@@ -217,7 +238,7 @@ function cardHTML(g, rank, showDate) {
   const detail = !isOpen ? '' : `<div class="detail">
       <div>
         <div class="block"><h4>Hour by hour at ${esc(g.venue)}</h4>${hoursHTML(g)}</div>
-        <div class="block"><h4>Flying in${prefs.home ? ` from ${prefs.home}` : ''}</h4>${planHTML(g)}</div>
+        <div class="block"><h4>When to land</h4>${planHTML(g)}</div>
       </div>
       <div>
         <div class="block"><h4>Airport to the ${g.sport === 'nhl' ? 'arena' : 'ballpark'}</h4>${routesHTML(g)}</div>
@@ -233,7 +254,7 @@ function cardHTML(g, rank, showDate) {
       </div>
     </div>`;
   return `<article class="game${isOpen ? ' open' : ''}${off ? ' dim' : ''}" data-id="${g.id}">
-    <div class="game-main${prefs.home ? '' : ' no-trip'}" role="button" tabindex="0" aria-expanded="${isOpen}" data-do="toggle">
+    <div class="game-main" role="button" tabindex="0" aria-expanded="${isOpen}" data-do="toggle">
       <div class="score t${tier}" style="--v:${g.best}" title="Overall score out of 100">${g.best}</div>
       <div class="who">
         <div class="eyebrow">${when}${tags.join('')}</div>
@@ -319,7 +340,8 @@ function render() {
 
   const foot = $('foot'); foot.hidden = false;
   const upd = nhlUpdated();
-  foot.innerHTML = `<p>The score blends weather, the airport-to-venue ride${prefs.home ? ' and how easy the flight is' : ''}. Weather looks at the hours you would be in your seat: comfort between 65 and 82°F, the highest rain chance, wind and storms. Indoor and roofed venues are mostly shielded from it.</p>
+  foot.innerHTML = `<p>Land-by times allow ${DEPLANE} minutes to get off the plane, the transit ride, and ${spare(prefs.cushion)} to spare before the start; change the spare time in Trip settings.</p>
+    <p>The score blends weather, the airport-to-venue ride${prefs.home ? ' and how easy the flight is' : ''}. Weather looks at the hours you would be in your seat: comfort between 65 and 82°F, the highest rain chance, wind and storms. Indoor and roofed venues are mostly shielded from it.</p>
     <p>Transit times are estimates without checked bags, written by hand; service thins out late, so check the last train before a night game. All times are local to the venue.</p>
     <p>Schedules from MLB and the NHL${upd ? ` (NHL refreshed ${new Date(upd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})` : ''}, weather from Open-Meteo${hasPrices() ? ', prices from SeatGeek' : ''}.</p>`;
 }
@@ -342,7 +364,7 @@ function syncControls() {
   const air = AIRLINES[prefs.airline]?.[0];
   $('tripBtnText').textContent = prefs.home ? `From ${prefs.home}${air ? ` on ${air}` : ''}` : 'Set your home airport';
   $('tripHint').innerHTML = prefs.home
-    ? `Flying from ${prefs.home}${air ? ` on ${esc(air)}` : ''}, taking off no earlier than ${fmtMin(prefs.earliest)}.`
+    ? `Flying from ${prefs.home}${air ? ` on ${esc(air)}` : ''}. Trip labels are estimates from distance, not airline schedules.`
     : 'Set your home airport to filter by trip length.';
   $('sortSel').querySelector('[value=trip]').disabled = !prefs.home;
   $('sortSel').querySelector('[value=price]').disabled = !hasPrices();
@@ -418,11 +440,12 @@ $('airlineIn').insertAdjacentHTML('beforeend', Object.entries(AIRLINES).map(([c,
 const timeOpts = (from, to) => { let s = ''; for (let m = from; m <= to; m += 30) s += `<option value="${m}">${fmtMin(m)}</option>`; return s; };
 $('earliestIn').innerHTML = timeOpts(300, 600);
 $('latestIn').innerHTML = timeOpts(1020, 1410);
+$('cushionIn').innerHTML = [30, 45, 60, 90, 120].map(m => `<option value="${m}">${spare(m)}</option>`).join('');
 
 // Home airport picker: a searchable list of every airport with airline service
 let airportDb = null, airportLoad = null, pick = null, matches = [], hi = -1;
 function loadAirports() {
-  airportLoad ||= fetch('data/airports.json?v=4')
+  airportLoad ||= fetch('data/airports.json?v=5')
     .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
     .then(d => {
       airportDb = d.list.map(a => ({
@@ -479,7 +502,7 @@ function openSettings() {
   $('homeIn').value = prefs.home ? (prefs.homeLabel || `${prefs.home}  ${AIRPORTS[prefs.home]?.[0] || ''}`.trim()) : '';
   $('homeClear').hidden = !prefs.home; $('homeList').hidden = true; $('homeMsg').hidden = true;
   $('airlineIn').value = prefs.airline;
-  $('earliestIn').value = prefs.earliest; $('latestIn').value = prefs.latest; $('sgIn').value = prefs.sgKey;
+  $('earliestIn').value = prefs.earliest; $('latestIn').value = prefs.latest; $('cushionIn').value = prefs.cushion; $('sgIn').value = prefs.sgKey;
   dlg.showModal();
   loadAirports().then(showMatches).catch(() => homeError("The airport list didn't load. Check your connection, then close and reopen settings."));
 }
@@ -507,7 +530,7 @@ $('tripForm').addEventListener('submit', e => {
     else { e.preventDefault(); homeError('Choose an airport from the list so the code is one we know.'); $('homeIn').focus(); showMatches(); return; }
   }
   const keyChanged = $('sgIn').value.trim() !== prefs.sgKey;
-  Object.assign(prefs, { airline: $('airlineIn').value, earliest: +$('earliestIn').value, latest: +$('latestIn').value, sgKey: $('sgIn').value.trim() });
+  Object.assign(prefs, { airline: $('airlineIn').value, earliest: +$('earliestIn').value, latest: +$('latestIn').value, cushion: +$('cushionIn').value, sgKey: $('sgIn').value.trim() });
   if (!typed) { prefs.home = ''; prefs.homeInfo = null; prefs.homeLabel = ''; prefs.trip = 'any'; }
   else if (!pick.keep) {
     prefs.home = pick.code; prefs.homeLabel = airportLabel(pick);

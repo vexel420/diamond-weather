@@ -153,7 +153,6 @@ h3.group small { font-size: 13.5px; font-weight: 450; color: var(--faint); lette
   grid-template-columns: 52px minmax(0, 1fr) auto; border-radius: var(--r); cursor: pointer;
 }
 .game-main .facts { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 22px; padding-top: 14px; margin-top: 8px; border-top: 1px solid var(--line); }
-.game-main.no-trip .facts { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .game-main .who { grid-column: 2; grid-row: 1; }
 .game-main .price { grid-column: 3; grid-row: 1; }
 .score {
@@ -206,6 +205,7 @@ h3.group small { font-size: 13.5px; font-weight: 450; color: var(--faint); lette
 .hr .p { font-size: 12px; color: var(--sub); }
 .hr .p.wet { color: var(--rain); font-weight: 600; }
 .hr .w { font-size: 11.5px; color: var(--faint); }
+.hr .w i { font-style: normal; }
 .cap { font-size: 12.5px; color: var(--faint); margin-top: 10px; }
 .block + .block { margin-top: 24px; }
 .route { padding: 12px 0; border-top: 1px solid var(--line); display: grid; gap: 4px; }
@@ -213,6 +213,7 @@ h3.group small { font-size: 13.5px; font-weight: 450; color: var(--faint); lette
 .route h5 { font-size: 14.5px; font-weight: 600; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
 .route h5 span { font-weight: 450; color: var(--sub); font-size: 13.5px; }
 .route p { font-size: 14px; color: var(--sub); max-width: 62ch; }
+.route p.land { color: var(--ink); font-weight: 600; }
 .route a { font-size: 13.5px; font-weight: 550; }
 .plan { font-size: 14px; display: grid; gap: 8px; }
 .plan li { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 8px; list-style: none; color: var(--sub); }
@@ -284,9 +285,10 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
   .score { width: 44px; height: 44px; font-size: 16px; }
   .teams { font-size: 17px; }
   .teams img { width: 20px; height: 20px; }
-  .game-main .facts, .game-main.no-trip .facts { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 14px; }
+  .game-main .facts { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 14px; }
   .price .amt { font-size: 17px; }
   .detail { padding: 18px 14px; }
   .hr .t { font-size: 15px; }
+  .hr .w i { display: none; }
   .two { grid-template-columns: 1fr; }
 }
