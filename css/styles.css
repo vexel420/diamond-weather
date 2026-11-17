@@ -151,20 +151,11 @@ h3.group small { font-size: 13.5px; font-weight: 450; color: var(--faint); lette
 .game.dim .game-main { opacity: .55; }
 .game-main {
   display: grid; align-items: center; gap: 8px 18px; padding: 18px 20px; width: 100%; text-align: left;
-  grid-template-columns: 52px minmax(0, 1fr) auto; border-radius: var(--r); cursor: pointer;
+  grid-template-columns: minmax(0, 1fr) auto; border-radius: var(--r); cursor: pointer;
 }
 .game-main .facts { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px 22px; padding-top: 14px; margin-top: 8px; border-top: 1px solid var(--line); }
-.game-main .who { grid-column: 2; grid-row: 1; }
-.game-main .price { grid-column: 3; grid-row: 1; }
-.score {
-  --tone: var(--good);
-  width: 48px; height: 48px; border-radius: 50%; display: grid; place-items: center;
-  font-size: 18px; font-weight: 650; letter-spacing: -.03em; font-variant-numeric: tabular-nums;
-  background: conic-gradient(var(--tone) calc(var(--v) * 1%), var(--line) 0);
-  position: relative; isolation: isolate;
-}
-.score::before { content: ''; position: absolute; inset: 4px; border-radius: 50%; background: var(--bg); z-index: -1; }
-.score.t2 { --tone: var(--warn); } .score.t1 { --tone: var(--bad); }
+.game-main .who { grid-column: 1; grid-row: 1; }
+.game-main .price { grid-column: 2; grid-row: 1; }
 
 .who { min-width: 0; display: grid; gap: 5px; }
 .eyebrow { font-size: 13px; color: var(--sub); display: flex; flex-wrap: wrap; gap: 2px 8px; align-items: center; }
@@ -284,8 +275,7 @@ dialog hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
   .when .seg { order: 5; flex: 1 1 100%; }
   .sort { font-size: 0; gap: 0; }
   .sort select { font-size: 14px; }
-  .game-main { padding: 16px 14px; gap: 6px 12px; grid-template-columns: 46px minmax(0, 1fr) auto; }
-  .score { width: 44px; height: 44px; font-size: 16px; }
+  .game-main { padding: 16px 14px; gap: 6px 12px; grid-template-columns: minmax(0, 1fr) auto; }
   .teams { font-size: 17px; }
   .teams img { width: 20px; height: 20px; }
   .game-main .facts { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px 14px; }

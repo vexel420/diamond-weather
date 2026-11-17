@@ -1,9 +1,9 @@
-import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=8';
+import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=9';
 import {
   todayStr, addDays, clock, pad, OFFSETS,
   loadBaseball, loadHockey, nextBaseballDate, nextHockeyDate, nhlUpdated, loadEspn, nextEspnDate,
   attachWeather, attachPrices, attachEspnPrices, scoreGame, DEPLANE, weatherGrade, skyOf, findPairs, ticketLinks, TRIP_LABEL
-} from './core.js?v=8';
+} from './core.js?v=9';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -244,7 +244,6 @@ function planHTML(g) {
 function cardHTML(g, rank, showDate) {
   const isOpen = open.has(g.id), isSaved = saved.has(g.venueKey);
   const off = /postponed|cancel|suspended/i.test(g.status);
-  const tier = g.best >= 70 ? 3 : g.best >= 50 ? 2 : 1;
   const tags = [];
   if (rank === 1) tags.push('<span class="tag top">Top pick</span>');
   tags.push(`<span class="tag">${SPORT_NAME[g.sport]}</span>`);
@@ -273,7 +272,6 @@ function cardHTML(g, rank, showDate) {
     </div>`;
   return `<article class="game${isOpen ? ' open' : ''}${off ? ' dim' : ''}" data-id="${g.id}">
     <div class="game-main" role="button" tabindex="0" aria-expanded="${isOpen}" data-do="toggle">
-      <div class="score t${tier}" style="--v:${g.best}" title="Overall score out of 100">${g.best}</div>
       <div class="who">
         <div class="eyebrow">${when}${tags.join('')}</div>
         <div class="teams">${teamHTML(g.away)}<span class="at">at</span>${teamHTML(g.home)}</div>
@@ -359,7 +357,7 @@ function render() {
   const foot = $('foot'); foot.hidden = false;
   const upd = nhlUpdated();
   foot.innerHTML = `<p>Land-by times allow ${DEPLANE} minutes to get off the plane, the transit ride, and ${spare(prefs.cushion)} to spare before the start; change the spare time in Trip settings.</p>
-    <p>The score blends weather, the airport-to-venue ride${prefs.home ? ' and how easy the flight is' : ''}. Weather looks at the hours you would be in your seat: comfort between 65 and 82°F, the highest rain chance, wind and storms. Indoor and roofed venues are mostly shielded from it.</p>
+    <p>Best overall ranks games by weather, the airport-to-venue ride${prefs.home ? ' and how easy the flight is' : ''}. Weather looks at the hours you would be in your seat: comfort between 65 and 82°F, the highest rain chance, wind and storms. Indoor and roofed venues are mostly shielded from it.</p>
     <p>Transit times are estimates without checked bags, written by hand; service thins out late, so check the last train before a night game. All times are local to the venue.</p>
     <p>Schedules from MLB, the NHL and ESPN${upd ? ` (NHL refreshed ${new Date(upd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})` : ''}, weather from Open-Meteo${hasPrices() ? `, prices from ${[...new Set(games.filter(g => g.price != null).map(g => g.priceSrc || 'SeatGeek'))].join(' and ')}` : ''}. College football covers the top division (FBS).</p>`;
 }
@@ -465,7 +463,7 @@ $('cushionIn').innerHTML = [30, 45, 60, 90, 120].map(m => `<option value="${m}">
 // Home airport picker: a searchable list of every airport with airline service
 let airportDb = null, airportLoad = null, pick = null, matches = [], hi = -1;
 function loadAirports() {
-  airportLoad ||= fetch('data/airports.json?v=8')
+  airportLoad ||= fetch('data/airports.json?v=9')
     .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
     .then(d => {
       airportDb = d.list.map(a => ({
