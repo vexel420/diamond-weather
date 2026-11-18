@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/styles.css?v=10">
+<link rel="stylesheet" href="css/styles.css?v=11">
 </head>
 <body>
 <header class="top">
@@ -35,14 +35,13 @@
   </section>
 
   <section class="bar" aria-label="What to show">
-    <div class="sports" id="sports" role="group" aria-label="Sports">
-      <button type="button" data-sport="all" title="Turn every sport on, or all off">All</button>
-      <button type="button" data-sport="mlb">MLB</button>
-      <button type="button" data-sport="aaa">Triple-A</button>
-      <button type="button" data-sport="nhl">NHL</button>
-      <button type="button" data-sport="nba">NBA</button>
-      <button type="button" data-sport="nfl">NFL</button>
-      <button type="button" data-sport="cfb">College football</button>
+    <div class="pick">
+      <div class="tabs" role="tablist" aria-label="Level of play">
+        <button type="button" role="tab" id="tab-pro" data-tab="pro">Professional</button>
+        <button type="button" role="tab" id="tab-college" data-tab="college">College</button>
+      </div>
+      <div class="sports" id="sports" role="group" aria-label="Sports"></div>
+      <div class="confs" id="confs" role="group" aria-label="Conferences" hidden></div>
     </div>
     <div class="when">
       <button class="icon-btn" id="prevBtn" type="button" aria-label="Earlier dates">
@@ -78,8 +77,11 @@
 
       <fieldset>
         <legend>Weather</legend>
-        <label class="range"><span>Coldest</span><input type="range" id="minTemp" min="10" max="90"><output id="minTempOut"></output></label>
-        <label class="range"><span>Hottest</span><input type="range" id="maxTemp" min="50" max="115"><output id="maxTempOut"></output></label>
+        <div class="seg full" id="unitSeg" role="group" aria-label="Temperature units">
+          <button type="button" data-u="F">°F</button><button type="button" data-u="C">°C</button><button type="button" data-u="both">Both</button>
+        </div>
+        <label class="range"><span>Coldest it feels</span><input type="range" id="minTemp" min="-10" max="90"><output id="minTempOut"></output></label>
+        <label class="range"><span>Hottest it feels</span><input type="range" id="maxTemp" min="50" max="115"><output id="maxTempOut"></output></label>
         <label class="range"><span>Rain chance</span><input type="range" id="maxRain" min="0" max="100" step="5"><output id="maxRainOut"></output></label>
         <label class="check"><input type="checkbox" id="coverPass"><span>Roofed and indoor venues skip these</span></label>
       </fieldset>
@@ -170,6 +172,6 @@
   </form>
 </dialog>
 
-<script type="module" src="js/app.js?v=10"></script>
+<script type="module" src="js/app.js?v=11"></script>
 </body>
 </html>

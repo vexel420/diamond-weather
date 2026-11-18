@@ -1,4 +1,4 @@
-name: Refresh venues and team logos
+name: Refresh venues, events and team logos
 on:
   schedule:
     - cron: '43 10 * * 1'
@@ -15,10 +15,11 @@ jobs:
           node-version: 22
       - run: node scripts/build-venues.mjs
       - run: node scripts/build-logos.mjs
-      - name: Commit if the venues or logos changed
+      - run: node scripts/build-events.mjs
+      - name: Commit if anything changed
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add data/venues.json data/logos.json
-          git diff --cached --quiet || git commit -m "Refresh venue locations and team logos"
+          git add data/venues.json data/conferences.json data/logos.json data/events.json
+          git diff --cached --quiet || git commit -m "Refresh venues, events and team logos"
           git push

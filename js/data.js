@@ -360,3 +360,88 @@ export const NFL_VENUES = {
   WSH:v(3,[r('DCA',55,'Metro Blue Line toward Largo to Morgan Boulevard, then a 20 minute walk.'), r('BWI',40,'A rideshare is about 35 minutes.')])
 };
 NFL_VENUES.LAR = NFL_VENUES.LAC; NFL_VENUES.NYJ = NFL_VENUES.NYG; NFL_VENUES.LA = NFL_VENUES.LAC; NFL_VENUES.WAS = NFL_VENUES.WSH;
+
+// ── College and other venues with real transit, by ESPN venue id ──
+// Written by hand, like the other notes. Every other college venue gets its nearest airports and a drive estimate.
+// `share` points at an NHL arena above when a college team plays in that building.
+const GT = v(3, [r('ATL', 35, 'MARTA Red or Gold Line to North Avenue, then a 10 minute walk west to campus.')]);
+const BU = v(3, [r('BOS', 45, 'Silver Line SL1 to South Station, Red Line to Park St, then the Green Line B branch to the Boston University stops on Commonwealth Avenue.')]);
+const NEU = v(3, [r('BOS', 40, 'Silver Line SL1 to South Station, Red Line to Downtown Crossing, then the Orange Line to Massachusetts Avenue. Five minute walk.')]);
+const HARVARD = v(2, [r('BOS', 50, 'Silver Line SL1 to South Station, Red Line to Harvard, then a 15 minute walk across the Charles River to the athletic fields.')]);
+const VILLANOVA = v(3, [r('PHL', 60, 'SEPTA Airport Line to Suburban Station, then the Paoli/Thorndale Line to Villanova, which stops on campus.')]);
+const COLUMBIA = v(3, [r('LGA', 45, 'M60 Select Bus across 125th Street and down Broadway to 116th Street, at the campus gates.')]);
+const FORDHAM = v(2, [r('LGA', 50, 'M60 Select Bus to 125th Street and Lexington Avenue, then Metro-North Harlem Line from Harlem-125th St to Fordham, across from campus.')]);
+const RUTGERS = v(2, [r('EWR', 60, 'AirTrain to the airport rail station, NJ Transit Northeast Corridor Line to New Brunswick, then a Rutgers campus bus or a 10 minute rideshare across the river.')]);
+const HOWARD = v(3, [r('DCA', 30, 'Metro Yellow Line to Shaw-Howard U, then a 10 minute walk.')]);
+const GEORGETOWN = v(2, [r('DCA', 40, 'Metro Blue Line to Rosslyn, then the Georgetown University shuttle or a 20 minute walk across Key Bridge.')]);
+const NORTHWESTERN = v(2, [r('ORD', 80, 'Blue Line to Jackson, Red Line north to Howard, then the Purple Line to Central. Ten minute walk.'), r('MDW', 85, 'Orange Line to the Loop, Red Line north to Howard, then the Purple Line to Central.')]);
+const MINNESOTA = v(3, [r('MSP', 45, 'Metro Blue Line to U.S. Bank Stadium station, then the Green Line to Stadium Village, beside the stadium and arenas.')]);
+const UTAH = v(4, [r('SLC', 40, 'TRAX Green Line toward downtown, then the Red Line to Stadium station, at Rice-Eccles Stadium. The Huntsman Center is a short walk.')]);
+const USC = v(4, [r('LAX', 55, 'Shuttle to the LAX/Metro Transit Center, K Line to Expo/Crenshaw, then the E Line east to Expo Park/USC.'), r('BUR', 60, 'Metrolink or Amtrak to Union Station, B or D Line to 7th St/Metro Center, then the E Line to Expo Park/USC.')]);
+const STANFORD = v(2, [r('SJC', 40, 'Short rideshare or airport shuttle to Santa Clara station, Caltrain to Palo Alto, then the free Marguerite shuttle. On football days Caltrain also stops at Stanford Stadium.'), r('SFO', 60, 'BART to Millbrae, Caltrain south to Palo Alto, then the free Marguerite shuttle.')]);
+const ASU = v(3, [r('PHX', 35, 'Free PHX Sky Train to 44th St, then Valley Metro Rail east to Veterans Way/College Ave. Ten minute walk.')]);
+const CHARLOTTE = v(3, [r('CLT', 60, 'Sprinter bus 5 to uptown, then the LYNX Blue Line to UNC Charlotte-Main, the last stop, on campus.')]);
+const DU = v(3, [r('DEN', 60, 'RTD A Line to Union Station, then the E Line light rail to University of Denver station. Ten minute walk.')]);
+const BROWN = v(3, [r('PVD', 40, 'MBTA commuter rail from the airport station to Providence, then a 15 minute walk up College Hill.')]);
+const CSU = v(3, [r('CLE', 45, 'RTA Red Line to Tower City, then the HealthLine bus east along Euclid Avenue to campus.')]);
+const UH = v(2, [r('HOU', 50, 'METRO bus 40 to downtown, then the Purple Line to the UH stations on campus. A rideshare is about 15 minutes.')]);
+const RICE = v(2, [r('HOU', 60, 'METRO bus 40 to downtown, then the Red Line south to Dryden/TMC and a 10 minute walk. A rideshare is about 20 minutes.')]);
+const SMU = v(3, [r('DAL', 45, 'Love Link bus to Inwood/Love Field station, Green or Orange Line to downtown, then the Red or Blue Line north to SMU/Mockingbird. Ten minute walk.'), r('DFW', 70, 'DART from Terminal A to downtown, then the Red or Blue Line north to SMU/Mockingbird.')]);
+const TULANE = v(2, [r('MSY', 70, 'RTA 202 Airport Express to downtown, then the St. Charles streetcar to Tulane. Five minute walk.')]);
+export const VENUE_NOTES = {
+  721: GT, 2206: GT,
+  6282: v(4, [r('ATL', 15, 'Free ATL SkyTrain from the domestic terminal to the Gateway Center stop, beside the arena.')]),
+  1899: v(4, [r('PHL', 25, 'SEPTA Airport Line to University City station, then a 5 minute walk.')]),
+  1903: v(3, [r('PHL', 30, 'SEPTA Airport Line to University City station, then a 10 minute walk north through campus.')]),
+  2011: v(3, [r('PHL', 45, 'SEPTA Airport Line to Temple University station, then a 10 minute walk.')]),
+  1969: VILLANOVA, 717: VILLANOVA,
+  135: v(3, [r('BOS', 70, 'Silver Line SL1 to South Station, Red Line to Park St, then the Green Line B branch to Boston College, the last stop.')]),
+  990: BU, 1999: BU, 6615: BU, 1219: NEU, 6018: NEU, 1209: HARVARD, 3750: HARVARD,
+  1217: v(2, [r('BOS', 90, 'Silver Line SL1 to South Station, Red Line to Downtown Crossing, Orange Line to North Station, then the Lowell Line to Lowell and a 15 minute walk.')]),
+  146: v(3, [r('PVD', 35, 'MBTA commuter rail from the airport station to Providence, then a 15 minute walk downtown.')]),
+  1204: BROWN, 2036: BROWN,
+  64: v(2, [r('BDL', 40, 'Bradley Flyer bus to downtown Hartford, then a short walk.')]),
+  2002: COLUMBIA,
+  3802: v(2, [r('LGA', 60, 'M60 Select Bus to Broadway and 116th Street, then the 1 train north to 215 St.')]),
+  2007: FORDHAM, 150: FORDHAM,
+  2058: v(2, [r('JFK', 55, 'AirTrain to Jamaica, LIRR to Hempstead, then a 10 minute rideshare or bus.')]),
+  2008: RUTGERS, 6577: RUTGERS,
+  2125: v(4, [r('DCA', 25, 'Metro Blue Line to Foggy Bottom-GWU, then a 5 minute walk.')]),
+  1978: HOWARD, 3990: HOWARD, 2013: GEORGETOWN, 3847: GEORGETOWN,
+  1910: v(2, [r('DCA', 50, 'Metro Yellow Line to Gallery Place, Red Line to Tenleytown-AU, then the AU shuttle or a 15 minute walk.')]),
+  2133: v(2, [r('DCA', 55, 'Metro Yellow Line to Gallery Place, Green Line to College Park-U of Md, then the campus shuttle or a 20 minute walk.'), r('BWI', 35, 'A rideshare is about 30 minutes.')]),
+  5946: v(4, [r('DCA', 35, "Metro Yellow Line to L'Enfant Plaza, then the Green Line to Congress Heights, beside the arena.")]),
+  6274: v(3, [r('DCA', 30, "Metro Yellow Line to L'Enfant Plaza, Green Line to Navy Yard-Ballpark, then a 10 minute walk.")]),
+  7604: v(3, [r('DCA', 30, "Metro Yellow Line to L'Enfant Plaza, Green Line to Navy Yard-Ballpark, then a 10 minute walk.")]),
+  4938: v(4, [r('BWI', 35, 'Light RailLink from the terminal into downtown Baltimore; the line runs along Howard Street past the arena.')]),
+  1990: NORTHWESTERN, 11823: NORTHWESTERN,
+  10469: v(2, [r('ORD', 80, 'Blue Line to Jackson, Red Line north to Howard, then the Purple Line to Davis and a 20 minute walk east to the lakefront.')]),
+  5427: v(4, [r('MDW', 35, 'Orange Line to Roosevelt, then the Green Line one stop to Cermak-McCormick Place, beside the arena.'), r('ORD', 70, 'Blue Line to Clark/Lake, then the Green Line south to Cermak-McCormick Place.')]),
+  1895: v(4, [r('ORD', 45, 'Blue Line from the terminal to Racine, a block from the arena.'), r('MDW', 50, 'Orange Line to Clark/Lake, then the Blue Line toward Forest Park to Racine.')]),
+  1933: v(3, [r('ORD', 70, 'Blue Line to Jackson, then the Red Line north to Loyola, steps from the arena.')]),
+  3953: MINNESOTA, 378: MINNESOTA, 2094: MINNESOTA,
+  587: UTAH, 2196: UTAH,
+  782: v(4, [r('SEA', 45, 'Link 1 Line to University of Washington station, beside Husky Stadium. The arena is a 5 minute walk.')]),
+  477: USC, 1722: USC, 1918: USC,
+  1056: v(2, [r('BUR', 45, 'A rideshare is about 25 minutes. On game days, roads near the stadium close early.'), r('LAX', 100, 'Metro to Union Station, the A Line to Memorial Park, then the game-day Rose Bowl shuttle.')]),
+  2173: v(2, [r('LAX', 15, 'The campus is three miles north of the airport. A rideshare is about 10 minutes.')]),
+  2505: v(2, [r('LAX', 15, 'The arena is three miles from the terminals. A rideshare is 10 to 15 minutes.')]),
+  496: v(3, [r('OAK', 55, 'BART airport connector to Coliseum, BART toward Richmond to Downtown Berkeley, then a 15 minute walk up to campus.'), r('SFO', 75, 'BART to MacArthur, change for Downtown Berkeley, then a 15 minute walk.')]),
+  820: STANFORD, 3869: STANFORD, 3940: STANFORD,
+  544: v(3, [r('SJC', 20, 'The campus is two miles from the airport, across from Santa Clara Caltrain station. A rideshare is about 10 minutes.')]),
+  833: ASU, 7329: ASU,
+  4418: CHARLOTTE, 239: CHARLOTTE,
+  1947: v(4, [r('STL', 35, 'MetroLink Red Line to Grand station, then a 5 minute walk.')]),
+  2111: v(4, [r('SAN', 50, 'Bus 992 to downtown, then the Green Line trolley to SDSU station, under the campus beside the arena.')]),
+  7311: v(4, [r('SAN', 45, 'Bus 992 to downtown, then the Green Line trolley to Stadium station.')]),
+  1985: v(3, [r('MIA', 45, 'Metrorail Orange Line south to University station, then a 10 minute walk to campus.')]),
+  444: DU, 854: DU,
+  6020: v(3, [r('PDX', 50, 'MAX Red Line to Gateway, then the Green Line to PSU South, a block from the arena.')]),
+  2025: v(3, [r('PIT', 60, '28X Airport Flyer bus through downtown to Oakland, then a 10 minute walk uphill.')]),
+  1958: v(2, [r('PIT', 55, '28X Airport Flyer bus to downtown, then a 10 minute walk up the bluff to campus.')]),
+  2143: CSU, 4828: CSU, 4728: UH, 2126: UH, 1902: RICE, 3735: SMU, 1961: SMU, 2048: TULANE,
+  // NHL arenas that college teams also play in
+  1826: { share: 'NJD' }, 1828: { share: 'CBJ' }, 1834: { share: 'NSH' }, 1837: { share: 'PIT' }, 1839: { share: 'STL' },
+  1396: { share: 'TBL' }, 7224: { share: 'SEA' }, 5105: { share: 'BUF' }, 1840: { share: 'FLA' }, 1842: { share: 'ANA' },
+  999: { share: 'CAR' }, 7226: { share: 'NYI' }, 5060: { share: 'VGK' }
+};

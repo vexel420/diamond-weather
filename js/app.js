@@ -1,17 +1,29 @@
-import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=10';
+import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=11';
 import {
   todayStr, addDays, clock, pad, OFFSETS,
-  loadBaseball, loadHockey, nextBaseballDate, nextHockeyDate, nhlUpdated, loadEspn, nextEspnDate,
+  loadBaseball, loadHockey, nextBaseballDate, nextHockeyDate, nhlUpdated, loadEspn, nextEspnDate, loadTournaments, nextEventDate,
   attachWeather, attachPrices, attachEspnPrices, scoreGame, DEPLANE, weatherGrade, skyOf, findPairs, ticketLinks, TRIP_LABEL
-} from './core.js?v=10';
+} from './core.js?v=11';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
+// ───────── Sports, by tab ─────────
+const TABS = {
+  pro: [['mlb', 'MLB'], ['aaa', 'Triple-A'], ['nhl', 'NHL'], ['nba', 'NBA'], ['nfl', 'NFL'], ['mls', 'MLS'], ['wnba', 'WNBA'], ['nwsl', 'NWSL'],
+    ['golf', 'Golf'], ['tennis', 'Tennis'], ['racing', 'Racing']],
+  college: [['cfb', 'Football (FBS)'], ['fcs', 'Football (FCS)'], ['mbb', "Men's basketball"], ['wbb', "Women's basketball"], ['mhk', "Men's hockey"], ['cbase', 'Baseball']]
+};
+const ALL_SPORTS = [...TABS.pro, ...TABS.college].map(x => x[0]);
+const tabSports = () => TABS[prefs.tab].map(x => x[0]);
+const activeSports = () => prefs.sports.filter(s => tabSports().includes(s));
+// The best-known conferences come first in the conference row
+const POWER = ['SEC', 'Big Ten', 'ACC', 'Big 12', 'Big East'];
+
 // ───────── State ─────────
 const DEFAULTS = {
-  sports: ['mlb', 'aaa', 'nhl', 'nba', 'nfl', 'cfb'], knownSports: ['mlb', 'aaa', 'nhl', 'nba', 'nfl', 'cfb'], span: 3, sort: 'best',
-  minTemp: 10, maxTemp: 115, maxRain: 100, coverPass: true, transit: 1, trip: 'any', maxPrice: 300, savedOnly: false,
+  sports: ALL_SPORTS, knownSports: ALL_SPORTS, tab: 'pro', confs: [], span: 3, sort: 'best',
+  minTemp: -10, maxTemp: 115, units: 'F', maxRain: 100, coverPass: true, transit: 1, trip: 'any', maxPrice: 300, savedOnly: false,
   home: '', airline: '', stops: true, earliest: 360, latest: 1260, cushion: 45, sgKey: ''
 };
 let prefs = { ...DEFAULTS };
@@ -23,7 +35,11 @@ let query = '', loadSeq = 0, state = 'loading', nextDate = null, priceInfo = nul
 let storedKnown = null;
 try {
   const s = JSON.parse(localStorage.getItem('diamondWeather3') || 'null');
-  if (s) { prefs = { ...DEFAULTS, ...s.prefs }; saved = new Set(s.saved || []); storedKnown = s.prefs?.knownSports || ['mlb', 'aaa', 'nhl']; }
+  if (s) {
+    prefs = { ...DEFAULTS, ...s.prefs }; saved = new Set(s.saved || []); storedKnown = s.prefs?.knownSports || ['mlb', 'aaa', 'nhl'];
+    if (!s.prefs?.v && prefs.minTemp <= 10) prefs.minTemp = DEFAULTS.minTemp;
+  }
+  prefs.v = 2;
 } catch { /* storage unavailable: run with defaults */ }
 // Sports added since this browser last visited start switched on
 if (storedKnown) {
@@ -45,10 +61,16 @@ function niceDate(s, opts) {
   return new Date(y, m - 1, d).toLocaleDateString('en-US', opts || { weekday: 'long', month: 'long', day: 'numeric' });
 }
 const shortDate = s => niceDate(s, { weekday: 'short', month: 'short', day: 'numeric' });
+const toC = f => Math.round((f - 32) * 5 / 9);
+const tMain = f => prefs.units === 'C' ? toC(f) : Math.round(f);   // the main number: °C when chosen, else °F
+const deg = f => prefs.units === 'both' ? `${Math.round(f)}°F / ${toC(f)}°C` : `${tMain(f)}°`;
+const bigTemp = f => prefs.units === 'both' ? `${Math.round(f)}°F<small>${toC(f)}°C</small>` : `${tMain(f)}°`;
 const dur = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${pad(m % 60)} min`;
-const SPORT_NAME = { mlb: 'MLB', aaa: 'Triple-A', nhl: 'NHL', nba: 'NBA', nfl: 'NFL', cfb: 'College football' };
-const START_WORD = { mlb: 'first pitch', aaa: 'first pitch', nhl: 'puck drop', nba: 'tip-off', nfl: 'kickoff', cfb: 'kickoff' };
-const PLACE_WORD = { mlb: 'ballpark', aaa: 'ballpark', nhl: 'arena', nba: 'arena', nfl: 'stadium', cfb: 'stadium' };
+const SPORT_NAME = Object.fromEntries([...TABS.pro, ...TABS.college]);
+const START_WORD = { mlb: 'first pitch', aaa: 'first pitch', nhl: 'puck drop', nba: 'tip-off', nfl: 'kickoff', mls: 'kickoff', wnba: 'tip-off', nwsl: 'kickoff',
+  golf: 'morning play', tennis: 'the day session', racing: 'the race', cfb: 'kickoff', fcs: 'kickoff', mbb: 'tip-off', wbb: 'tip-off', mhk: 'puck drop', cbase: 'first pitch' };
+const PLACE_WORD = { mlb: 'ballpark', aaa: 'ballpark', nhl: 'arena', nba: 'arena', nfl: 'stadium', mls: 'stadium', wnba: 'arena', nwsl: 'stadium',
+  golf: 'course', tennis: 'venue', racing: 'track', cfb: 'stadium', fcs: 'stadium', mbb: 'arena', wbb: 'arena', mhk: 'arena', cbase: 'ballpark' };
 
 const ICON = {
   clear: '<circle cx="12" cy="12" r="4.2"/><path d="M12 2.5v2.4M12 19.1v2.4M2.5 12h2.4M19.1 12h2.4M5.3 5.3 7 7M17 17l1.7 1.7M18.7 5.3 17 7M7 17l-1.7 1.7"/>',
@@ -71,18 +93,29 @@ const SOURCES = [
   { label: 'NHL', sports: ['nhl'], load: loadHockey, next: async e => nextHockeyDate(e) },
   { label: 'NBA', sports: ['nba'], load: (a, b) => loadEspn('nba', a, b), next: e => nextEspnDate('nba', e) },
   { label: 'NFL', sports: ['nfl'], load: (a, b) => loadEspn('nfl', a, b), next: e => nextEspnDate('nfl', e) },
-  { label: 'College football', sports: ['cfb'], load: (a, b) => loadEspn('cfb', a, b), next: e => nextEspnDate('cfb', e) }
+  { label: 'MLS', sports: ['mls'], load: (a, b) => loadEspn('mls', a, b), next: e => nextEspnDate('mls', e) },
+  { label: 'WNBA', sports: ['wnba'], load: (a, b) => loadEspn('wnba', a, b), next: e => nextEspnDate('wnba', e) },
+  { label: 'NWSL', sports: ['nwsl'], load: (a, b) => loadEspn('nwsl', a, b), next: e => nextEspnDate('nwsl', e) },
+  { label: 'Golf', sports: ['golf'], load: (a, b) => loadTournaments('golf', a, b), next: e => nextEventDate('golf', e) },
+  { label: 'Tennis', sports: ['tennis'], load: (a, b) => loadTournaments('tennis', a, b), next: e => nextEventDate('tennis', e) },
+  { label: 'Racing', sports: ['racing'], load: (a, b) => loadTournaments('racing', a, b), next: e => nextEventDate('racing', e) },
+  { label: 'FBS football', sports: ['cfb'], load: (a, b) => loadEspn('cfb', a, b), next: e => nextEspnDate('cfb', e) },
+  { label: 'FCS football', sports: ['fcs'], load: (a, b) => loadEspn('fcs', a, b), next: e => nextEspnDate('fcs', e) },
+  { label: "Men's college basketball", sports: ['mbb'], load: (a, b) => loadEspn('mbb', a, b), next: e => nextEspnDate('mbb', e) },
+  { label: "Women's college basketball", sports: ['wbb'], load: (a, b) => loadEspn('wbb', a, b), next: e => nextEspnDate('wbb', e) },
+  { label: "Men's college hockey", sports: ['mhk'], load: (a, b) => loadEspn('mhk', a, b), next: e => nextEspnDate('mhk', e) },
+  { label: 'College baseball', sports: ['cbase'], load: (a, b) => loadEspn('cbase', a, b), next: e => nextEspnDate('cbase', e) }
 ];
 async function load() {
   const seq = ++loadSeq;
   state = 'loading'; errors = []; nextDate = null; priceInfo = null; weatherDone = false;
   render();
   const start = anchor, end = addDays(anchor, prefs.span - 1);
-  const sources = SOURCES.filter(x => x.sports.some(sp => prefs.sports.includes(sp)));
+  const sources = SOURCES.filter(x => x.sports.some(sp => activeSports().includes(sp)));
   const lists = await Promise.all(sources.map(x =>
     x.load(start, end).catch(e => { errors.push(x.label); console.error(e); return []; })));
   if (seq !== loadSeq) return;
-  games = lists.flat().filter(g => prefs.sports.includes(g.sport));
+  games = lists.flat().filter(g => activeSports().includes(g.sport));
   if (!games.length) {
     if (sources.length && errors.length === sources.length) { state = 'error'; render(); return; }
     const cands = await Promise.all(sources.map(x => x.next(end).catch(() => null)));
@@ -116,12 +149,14 @@ function filterCount() {
   if (prefs.trip !== 'any' && prefs.home) n++;
   if (prefs.maxPrice < DEFAULTS.maxPrice && hasPrices()) n++;
   if (prefs.savedOnly) n++;
+  if (prefs.tab === 'college' && prefs.confs.length) n++;
   if (query) n++;
   return n;
 }
 function passes(g) {
   const q = query.toLowerCase();
-  if (q && ![g.away.name, g.home.name, g.venue, g.city, g.affiliate].some(s => (s || '').toLowerCase().includes(q))) return false;
+  if (q && ![g.title, g.label, g.away?.name, g.home?.name, g.venue, g.city, g.affiliate, ...(g.confs || [])].some(s => (s || '').toLowerCase().includes(q))) return false;
+  if (prefs.tab === 'college' && prefs.confs.length && !(g.confs || []).some(c => prefs.confs.includes(c))) return false;
   if (prefs.savedOnly && !saved.has(g.venueKey)) return false;
   if (prefs.transit > 1 && g.level < prefs.transit) return false;
   if (prefs.home && prefs.trip !== 'any') {
@@ -134,18 +169,19 @@ function passes(g) {
   if (!wxOn) return true;
   if ((g.indoor || g.roof) && prefs.coverPass) return true;
   if (!g.wx || g.wx.bare) return false;
-  return g.wx.t0 >= prefs.minTemp && g.wx.t0 <= prefs.maxTemp && g.wx.pop <= prefs.maxRain;
+  return g.wx.feels0 >= prefs.minTemp && g.wx.feels0 <= prefs.maxTemp && g.wx.pop <= prefs.maxRain;
 }
 
 // ───────── Card pieces ─────────
 function weatherFact(g) {
   const gr = weatherGrade(g), w = g.wx;
+  if (g.lat == null && g.title) return `<div class="fact"><div class="k">${icon('none')} Location not listed</div><div class="s">No forecast without a location</div></div>`;
   if (!w && errors.includes('weather')) return `<div class="fact"><div class="k">${icon('none')} Forecast didn't load</div><div class="s">Refresh to try again</div></div>`;
   if (!w) return `<div class="fact"><div class="k">${icon('none')} ${state === 'ready' && !weatherDone ? 'Loading forecast' : 'No forecast yet'}</div><div class="s">${state === 'ready' && !weatherDone ? 'One moment' : 'Check back closer to the game'}</div></div>`;
   if (w.bare) return `<div class="fact"><div class="k">${icon('indoor')} ${g.indoor ? 'Indoors' : esc(g.roof)}</div><div class="s">Plays in any weather</div></div>`;
   const typ = g.wxSrc === 'typical';
-  const sub = g.indoor ? `Indoors, ${w.pop}% rain outside` : `${typ ? 'Typical' : gr.word}, ${w.pop}% rain${g.roof ? ', roof' : ''}`;
-  return `<div class="fact"><div class="k">${icon(w.sky)} <span class="temp">${w.t0}°</span></div><div class="s"><span class="dot g${g.indoor ? 0 : gr.n}" style="display:inline-block;margin-right:6px"></span>${esc(sub)}</div></div>`;
+  const sub = g.indoor ? `Indoors. Outside feels like ${deg(w.feels0)}` : `${typ ? 'Typically feels' : 'Feels'} like ${deg(w.feels0)}, ${w.pop}% rain${g.roof ? ', roof' : ''}`;
+  return `<div class="fact"><div class="k">${icon(w.sky)} <span class="temp">${bigTemp(w.t0)}</span></div><div class="s"><span class="dot g${g.indoor ? 0 : gr.n}" style="display:inline-block;margin-right:6px"></span>${esc(sub)}</div></div>`;
 }
 function transitFact(g) {
   if (!g.info) return `<div class="fact"><div class="k"><span class="dot"></span> No transit notes</div><div class="s">Not a regular home venue</div></div>`;
@@ -219,19 +255,27 @@ function teamHTML(t) {
   return `<span class="t"><span class="logo"${fit ? ` style="${fit.box}"` : ''}><img src="${esc(t.logo)}" alt=""${LOGO_CORS.test(t.logo) ? ' crossorigin="anonymous"' : ''}${fit ? ` style="${fit.img}"` : ''} loading="lazy" onerror="this.parentNode.remove()"></span>${esc(t.short)}</span>`;
 }
 
+function dailyHTML(g) {
+  if (!g.daily?.some(d => d.hi != null)) return `<p class="hint">Day-by-day forecasts appear once the dates are within about two weeks.</p>`;
+  return `<div class="daily">${g.daily.map((d, i) => `<div class="day">
+      <span class="d"><b>${niceDate(d.date, { weekday: 'short' })}</b> ${niceDate(d.date, { month: 'short', day: 'numeric' })}</span>
+      ${d.hi == null ? '<span></span><span class="muted">No forecast yet</span><span></span>' : `${icon(skyOf({ code: d.code, pop: d.pop, day: true }, false), 18)}
+      <span class="hl">${tMain(d.hi)}° / ${tMain(d.lo)}°<small>feels ${tMain(d.feels)}°</small></span>
+      <span class="r${d.pop >= 30 ? ' wet' : ''}">${d.pop}% rain</span>`}</div>`).join('')}</div>`;
+}
 function hoursHTML(g) {
   if (!g.wxHours) return `<p class="hint">${state === 'ready' && errors.includes('weather') ? "The forecast service didn't answer. Refresh to try again." : 'No hourly forecast for this date yet.'}</p>`;
   const cells = g.wxHours.map((h, i) => {
     const t = new Date(g.start + OFFSETS[i] * 3600000).toLocaleTimeString('en-US', { timeZone: g.tz, hour: 'numeric' }).replace(/\s?AM/i, 'a').replace(/\s?PM/i, 'p');
     if (!h) return `<div class="hr"><span class="h">${t}</span><span class="t muted">–</span></div>`;
     return `<div class="hr${OFFSETS[i] === 0 ? ' first' : ''}">
-      <span class="h">${t}</span>${icon(skyOf(h, false), 18)}<span class="t">${h.t}°</span>
+      <span class="h">${t}</span>${icon(skyOf(h, false), 18)}<span class="t">${tMain(h.t)}°</span>${prefs.units === 'both' ? `<span class="t2">${toC(h.t)}°C</span>` : ''}<span class="fl">${tMain(h.feels)}°</span>
       <span class="bar" title="${h.pop}% chance of rain"><i style="height:${h.pop}%"></i></span>
       <span class="p${h.pop >= 30 ? ' wet' : ''}">${h.pop}%</span><span class="w">${h.wind}<i> mph</i></span></div>`;
   }).join('');
   const cap = g.wxSrc === 'typical'
-    ? 'Too far out for a forecast. This is what is typical for the week, averaged over the past three years.'
-    : `Shaded column is ${startWord(g)}. Bars show the chance of rain; wind is in mph.`;
+    ? `Too far out for a forecast. This is what is typical for the week, averaged over the past three years. Grey numbers are what it feels like${prefs.units === 'both' ? ' in °F' : ''}.`
+    : `Shaded column is ${startWord(g)}. Grey numbers are what it feels like${prefs.units === 'both' ? ' in °F' : ''}. Bars show the chance of rain; wind is in mph.`;
   return `<div class="hours">${cells}</div><p class="cap">${cap}</p>`;
 }
 function mapsLink(g, r) {
@@ -255,6 +299,7 @@ function planHTML(g) {
   const tzOf = code => AIRPORTS[code][3];
   const place = PLACE_WORD[g.sport] || 'venue';
   const li = [];
+  if (g.allDay) li.push(`<li><span>Play runs all day. These times get you there for ${startWord(g)} at ${clock(g.start, g.tz)}.</span></li>`);
   if (g.tbd) li.push(`<li class="no"><span>${g.timeLost ? `ESPN isn't giving the ${startWord(g)} time right now` : `The ${startWord(g)} time hasn't been announced`}, so these times assume ${clock(g.start, g.tz)}. Check the time before you book.</span></li>`);
   li.push(`<li class="yes"><span><b>Land at ${esc(AIRPORTS[arr.a][0])} (${arr.a}) by ${clock(arr.by, tzOf(arr.a))}.</b> That allows ${DEPLANE} min to get off the plane, about ${arr.mins} min to the ${place}, and ${spare(prefs.cushion)} to spare before ${startWord(g)} at ${clock(g.start, g.tz)}.</span></li>`);
   const others = g.arrivals.filter(x => x.a !== arr.a);
@@ -285,12 +330,16 @@ function cardHTML(g, rank, showDate) {
   if (rank === 1) tags.push('<span class="tag top">Top pick</span>');
   tags.push(`<span class="tag">${SPORT_NAME[g.sport]}</span>`);
   if (g.label) tags.push(`<span class="tag">${esc(g.label)}</span>`);
+  if (g.major) tags.push('<span class="tag">Major</span>');
+  if (g.confGame) tags.push(`<span class="tag">${esc(g.confGame)}</span>`);
   if (g.status && !/^(scheduled|pre-game|warmup)$/i.test(g.status)) tags.push(`<span class="tag${off ? ' alert' : ''}">${esc(g.status)}</span>`);
-  const when = `${showDate ? `<b>${shortDate(g.date)}</b>` : ''}<b>${g.tbd ? (g.timeLost ? `${startWord(g)[0].toUpperCase()}${startWord(g).slice(1)} time unavailable` : 'Time to be announced') : clock(g.start, g.tz, true)}</b>`;
+  const dayWord = g.allDay ? (g.sport === 'golf' && g.days.length === 4 ? `Round ${g.dayIndex} of 4` : g.multiDay ? `Day ${g.dayIndex} of ${g.days.length}` : 'All day') : '';
+  const when = g.allDay ? `${showDate ? `<b>${shortDate(g.date)}</b>` : ''}<b>${dayWord}</b>` : `${showDate ? `<b>${shortDate(g.date)}</b>` : ''}<b>${g.tbd ? (g.timeLost ? `${startWord(g)[0].toUpperCase()}${startWord(g).slice(1)} time unavailable` : 'Time to be announced') : clock(g.start, g.tz, true)}</b>`;
   const t = ticketLinks(g);
   const detail = !isOpen ? '' : `<div class="detail">
       <div>
-        <div class="block"><h4>Hour by hour at ${esc(g.venue)}</h4>${hoursHTML(g)}</div>
+        ${g.indoor ? '' : `<div class="block"><h4>Hour by hour${g.multiDay ? `, ${shortDate(g.date)}` : ''} at ${esc(g.venue)}</h4>${hoursHTML(g)}</div>`}
+        ${g.multiDay ? `<div class="block"><h4>Day by day, 10 AM to 6 PM</h4>${dailyHTML(g)}</div>` : ''}
         <div class="block"><h4>When to land</h4>${planHTML(g)}</div>
       </div>
       <div>
@@ -311,8 +360,8 @@ function cardHTML(g, rank, showDate) {
     <div class="game-main" role="button" tabindex="0" aria-expanded="${isOpen}" data-do="toggle">
       <div class="who">
         <div class="eyebrow">${when}${tags.join('')}</div>
-        <div class="teams">${teamHTML(g.away)}<span class="at">at</span>${teamHTML(g.home)}</div>
-        <div class="venue">${esc(g.venue)}${g.city ? ', ' + esc(g.city) : ''}${isSaved ? ' · saved' : ''}</div>
+        <div class="teams">${g.title ? `<span class="t title">${esc(g.title)}</span>` : `${teamHTML(g.away)}<span class="at">at</span>${teamHTML(g.home)}`}</div>
+        <div class="venue">${esc(g.venue)}${g.city ? ', ' + esc(g.city) : ''}${g.multiDay ? `, ${shortDate(g.first)} to ${shortDate(g.last)}` : ''}${isSaved ? ', saved' : ''}</div>
       </div>
       <div class="facts">${weatherFact(g)}${transitFact(g)}${tripFact(g)}</div>
       ${priceFact(g)}
@@ -348,9 +397,9 @@ function render() {
     list.innerHTML = `<div class="empty"><h3>The schedule didn't load</h3><p>The schedule service didn't answer. Check your connection and try again.</p><div class="acts"><button class="btn primary" data-do="reload" type="button">Try again</button></div></div>`;
     return;
   }
-  if (!prefs.sports.length) {
+  if (!activeSports().length) {
     count.textContent = '';
-    list.innerHTML = `<div class="empty"><h3>Pick a sport</h3><p>Tap All, or turn on any sport above, to see games.</p></div>`;
+    list.innerHTML = `<div class="empty"><h3>Pick a sport</h3><p>Tap All, or turn on any sport above, to see what's on.</p></div>`;
     return;
   }
   if (!games.length) {
@@ -362,8 +411,10 @@ function render() {
   }
 
   const shown = games.filter(passes);
-  const bySport = prefs.sports.map(s => { const n = shown.filter(g => g.sport === s).length; return n ? `${n} ${SPORT_NAME[s]}` : ''; }).filter(Boolean).join(', ');
-  count.innerHTML = `<strong>${shown.length} game${shown.length === 1 ? '' : 's'}</strong>, ${esc(range)}${bySport && prefs.sports.length > 1 ? ` <span class="muted">(${bySport})</span>` : ''}`;
+  const bySport = activeSports().map(s => { const n = shown.filter(g => g.sport === s).length; return n ? `${n} ${SPORT_NAME[s]}` : ''; }).filter(Boolean).join(', ');
+  const events = shown.filter(g => g.title).length;
+  const noun = !events ? (shown.length === 1 ? 'game' : 'games') : events === shown.length ? (shown.length === 1 ? 'event' : 'events') : 'games and events';
+  count.innerHTML = `<strong>${shown.length} ${noun}</strong>, ${esc(range)}${bySport && activeSports().length > 1 ? ` <span class="muted">(${bySport})</span>` : ''}`;
 
   const notes = [];
   if (errors.includes('weather')) notes.push(`<div class="note warn"><p>Some forecasts didn't load. The weather service may be busy.</p><button class="link" data-do="reload" type="button">Try again</button></div>`);
@@ -394,22 +445,26 @@ function render() {
   const foot = $('foot'); foot.hidden = false;
   const upd = nhlUpdated();
   foot.innerHTML = `<p>Land-by times allow ${DEPLANE} minutes to get off the plane, the transit ride, and ${spare(prefs.cushion)} to spare before the start; change the spare time in Trip settings.</p>
-    <p>Best overall ranks games by weather, the airport-to-venue ride${prefs.home ? ' and how easy the flight is' : ''}. Weather looks at the hours you would be in your seat: comfort between 65 and 82°F, the highest rain chance, wind and storms. Indoor and roofed venues are mostly shielded from it.</p>
+    <p>Best overall ranks games by weather, the airport-to-venue ride${prefs.home ? ' and how easy the flight is' : ''}. Weather looks at the hours you would be in your seat: a feels-like temperature between ${deg(65)} and ${deg(82)}, the highest rain chance, wind and storms. The temperature filters use the feels-like temperature at the start. Indoor and roofed venues are mostly shielded from it.</p>
     <p>Transit times are estimates without checked bags, written by hand; service thins out late, so check the last train before a night game. All times are local to the venue.</p>
-    <p>Schedules from MLB, the NHL and ESPN${upd ? ` (NHL refreshed ${new Date(upd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})` : ''}, weather from Open-Meteo${hasPrices() ? `, prices from ${[...new Set(games.filter(g => g.price != null).map(g => g.priceSrc || 'SeatGeek'))].join(' and ')}` : ''}. College football covers the top division (FBS).</p>`;
+    <p>Schedules from MLB, the NHL and ESPN${upd ? ` (NHL refreshed ${new Date(upd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})` : ''}, weather from Open-Meteo${hasPrices() ? `, prices from ${[...new Set(games.filter(g => g.price != null).map(g => g.priceSrc || 'SeatGeek'))].join(' and ')}` : ''}. College basketball covers Division I. ESPN lists only some college baseball games.</p>`;
 }
 
 function syncControls() {
   $('dateIn').value = anchor;
   const press = (id, attr, val) => document.querySelectorAll(`#${id} button`).forEach(b => b.setAttribute('aria-pressed', String(b.dataset[attr] === String(val))));
-  document.querySelectorAll('#sports button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.sport === 'all'
-    ? DEFAULTS.knownSports.every(x => prefs.sports.includes(x)) : prefs.sports.includes(b.dataset.sport))));
+  document.querySelectorAll('.tabs button').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === prefs.tab)));
+  const allOn = tabSports().every(x => prefs.sports.includes(x));
+  $('sports').innerHTML = `<button type="button" data-sport="all" aria-pressed="${allOn}" title="Turn every sport on this tab on, or all off">All</button>`
+    + TABS[prefs.tab].map(([k, name]) => `<button type="button" data-sport="${k}" aria-pressed="${prefs.sports.includes(k)}">${esc(name)}</button>`).join('');
+  confRow();
   press('spanSeg', 'span', prefs.span); press('transitSeg', 't', prefs.transit); press('tripSeg', 'trip', prefs.home ? prefs.trip : 'any');
   document.querySelectorAll('#tripSeg button').forEach(b => { b.disabled = !prefs.home && b.dataset.trip !== 'any'; });
   const set = (id, v) => { const el = $(id); if (el.value !== String(v)) el.value = v; };
   set('minTemp', prefs.minTemp); set('maxTemp', prefs.maxTemp); set('maxRain', prefs.maxRain); set('maxPrice', prefs.maxPrice); set('sortSel', prefs.sort);
-  $('minTempOut').textContent = prefs.minTemp <= DEFAULTS.minTemp ? 'Any' : prefs.minTemp + '°';
-  $('maxTempOut').textContent = prefs.maxTemp >= DEFAULTS.maxTemp ? 'Any' : prefs.maxTemp + '°';
+  $('minTempOut').textContent = prefs.minTemp <= DEFAULTS.minTemp ? 'Any' : deg(prefs.minTemp);
+  $('maxTempOut').textContent = prefs.maxTemp >= DEFAULTS.maxTemp ? 'Any' : deg(prefs.maxTemp);
+  document.querySelectorAll('#unitSeg button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.u === prefs.units)));
   $('maxRainOut').textContent = prefs.maxRain >= 100 ? 'Any' : prefs.maxRain + '%';
   $('maxPriceOut').textContent = prefs.maxPrice >= DEFAULTS.maxPrice ? 'Any' : '$' + prefs.maxPrice;
   $('priceBox').hidden = !hasPrices();
@@ -441,14 +496,42 @@ $('weekendBtn').onclick = () => {
 };
 $('dateIn').onchange = e => setAnchor(e.target.value);
 $('spanSeg').onclick = e => { const b = e.target.closest('button'); if (b) { prefs.span = +b.dataset.span; store(); setAnchor(anchor); } };
+// Conferences present in the loaded college games, plus any already chosen
+let confsOpen = false;
+function confRow() {
+  const row = $('confs');
+  row.hidden = prefs.tab !== 'college' || (!games.length && !prefs.confs.length);
+  if (row.hidden) return;
+  const counts = {};
+  for (const g of games) for (const c of new Set(g.confs || [])) counts[c] = (counts[c] || 0) + 1;
+  for (const c of prefs.confs) counts[c] ||= 0;
+  const names = Object.keys(counts).sort((a, b) => ((POWER.indexOf(a) + 1 || 99) - (POWER.indexOf(b) + 1 || 99)) || (counts[b] - counts[a]) || a.localeCompare(b));
+  const limit = 10, shown = confsOpen ? names : names.slice(0, limit);
+  for (const c of prefs.confs) if (!shown.includes(c)) shown.push(c);
+  row.innerHTML = `<span class="lbl">Conference</span><button type="button" data-conf="" aria-pressed="${!prefs.confs.length}">All</button>`
+    + shown.map(c => `<button type="button" data-conf="${esc(c)}" aria-pressed="${prefs.confs.includes(c)}">${esc(c)}</button>`).join('')
+    + (names.length > limit ? `<button type="button" class="more" data-more="1">${confsOpen ? 'Fewer' : `${names.length - limit} more`}</button>` : '');
+}
+document.querySelector('.tabs').onclick = e => {
+  const b = e.target.closest('[data-tab]'); if (!b || b.dataset.tab === prefs.tab) return;
+  prefs.tab = b.dataset.tab; store(); setAnchor(anchor);
+};
+$('confs').onclick = e => {
+  const b = e.target.closest('button'); if (!b) return;
+  if (b.dataset.more) { confsOpen = !confsOpen; confRow(); return; }
+  const c = b.dataset.conf;
+  prefs.confs = !c ? [] : prefs.confs.includes(c) ? prefs.confs.filter(x => x !== c) : [...prefs.confs, c];
+  refilter();
+};
 $('sports').onclick = e => {
   const b = e.target.closest('button'); if (!b) return;
-  const s = b.dataset.sport, all = DEFAULTS.knownSports;
-  if (s === 'all') prefs.sports = all.every(x => prefs.sports.includes(x)) ? [] : [...all];
+  const s = b.dataset.sport, all = tabSports();
+  if (s === 'all') prefs.sports = all.every(x => prefs.sports.includes(x)) ? prefs.sports.filter(x => !all.includes(x)) : [...new Set([...prefs.sports, ...all])];
   else prefs.sports = prefs.sports.includes(s) ? prefs.sports.filter(x => x !== s) : [...prefs.sports, s];
   store(); setAnchor(anchor);
 };
 $('sortSel').onchange = e => { prefs.sort = e.target.value; store(); render(); };
+$('unitSeg').onclick = e => { const b = e.target.closest('button'); if (b) { prefs.units = b.dataset.u; store(); render(); } };
 $('transitSeg').onclick = e => { const b = e.target.closest('button'); if (b) { prefs.transit = +b.dataset.t; refilter(); } };
 $('tripSeg').onclick = e => { const b = e.target.closest('button'); if (b && !b.disabled) { prefs.trip = b.dataset.trip; refilter(); } };
 ['minTemp', 'maxTemp', 'maxRain', 'maxPrice'].forEach(id => { $(id).oninput = e => { prefs[id] = +e.target.value; refilter(); }; });
@@ -500,7 +583,7 @@ $('cushionIn').innerHTML = [30, 45, 60, 90, 120].map(m => `<option value="${m}">
 // Home airport picker: a searchable list of every airport with airline service
 let airportDb = null, airportLoad = null, pick = null, matches = [], hi = -1;
 function loadAirports() {
-  airportLoad ||= fetch('data/airports.json?v=10')
+  airportLoad ||= fetch('data/airports.json?v=11')
     .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
     .then(d => {
       airportDb = d.list.map(a => ({
