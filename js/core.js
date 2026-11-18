@@ -1,5 +1,5 @@
 // Loading games, weather, ticket prices, and working out scores and trips. No DOM in this file.
-import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS, NBA_VENUES, NFL_VENUES, VENUE_NOTES } from './data.js?v=11';
+import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS, NBA_VENUES, NFL_VENUES, VENUE_NOTES } from './data.js?v=12';
 
 // ───────── Dates and time zones ─────────
 export const pad = n => String(n).padStart(2, '0');
@@ -205,7 +205,7 @@ async function locateUnknown(list) {
     if (!loc) continue;
     g.lat = loc.lat; g.lon = loc.lon; g.tz = loc.tz || g.tz;
     if (!g.info) {
-      airportRows ||= await getJSON('data/airports.json?v=11').then(d => d.list.map(a => [a[0], a[1], a[4], a[5], d.zones[a[6]]])).catch(() => []);
+      airportRows ||= await getJSON('data/airports.json?v=12').then(d => d.list.map(a => [a[0], a[1], a[4], a[5], d.zones[a[6]]])).catch(() => []);
       const near = airportRows.map(a => [a, miles(loc.lat, loc.lon, a[2], a[3])]).sort((x, y) => x[1] - y[1]).slice(0, 2);
       for (const [a] of near) AIRPORTS[a[0]] ||= [a[1], a[2], a[3], a[4]];
       g.info = driveInfo(near.map(([a, mi]) => [a[0], Math.round(mi)]), g.city);
@@ -461,7 +461,7 @@ export async function attachWeather(all, start, end) {
               const t = hs.map(k => h.temperature_2m[k]), f = hs.map(k => h.apparent_temperature[k] ?? h.temperature_2m[k]);
               const mid = hs[Math.floor(hs.length / 2)];
               return { date: d, hi: Math.round(Math.max(...t)), lo: Math.round(Math.min(...t)), feels: Math.round(f.reduce((a, b) => a + b, 0) / f.length),
-                pop: Math.max(...hs.map(k => h.precipitation_probability[k] ?? 0)), code: h.weather_code[mid] };
+                pop: Math.max(...hs.map(k => h.precipitation_probability[k] ?? 0)), code: Math.max(...hs.map(k => h.weather_code[k] ?? 0)), t: Math.round(Math.min(...t)) };
             });
           }
         }
@@ -480,10 +480,10 @@ export async function attachWeather(all, start, end) {
   const shift = (s, y) => y + s.slice(4);
   const packs = await Promise.all(years.map(y =>
     hourlyFor('https://archive-api.open-meteo.com/v1/archive', blank,
-      `hourly=temperature_2m,apparent_temperature,precipitation,wind_speed_10m&start_date=${addDays(shift(start, y), -4)}&end_date=${addDays(shift(end, y), 5)}&${units}`)
+      `hourly=temperature_2m,apparent_temperature,precipitation,snowfall,wind_speed_10m&start_date=${addDays(shift(start, y), -4)}&end_date=${addDays(shift(end, y), 5)}&${units}`)
       .then(arr => arr.map(h => {
         const m = new Map();
-        h?.time.forEach((t, k) => { if (h.temperature_2m[k] != null) m.set(t, [h.temperature_2m[k], h.precipitation[k] || 0, h.wind_speed_10m[k] || 0, h.apparent_temperature?.[k] ?? h.temperature_2m[k]]); });
+        h?.time.forEach((t, k) => { if (h.temperature_2m[k] != null) m.set(t, [h.temperature_2m[k], h.precipitation[k] || 0, h.wind_speed_10m[k] || 0, h.apparent_temperature?.[k] ?? h.temperature_2m[k], h.snowfall?.[k] || 0]); });
         return m;
       }))));
   blank.forEach((v, i) => {
@@ -491,17 +491,17 @@ export async function attachWeather(all, start, end) {
       if (g.wxHours || !beyond(g)) continue;
       const hrs = OFFSETS.map(off => {
         const d = new Date(hourMs(g, off));
-        let n = 0, st = 0, sw = 0, sf = 0, wet = 0;
+        let n = 0, st = 0, sw = 0, sf = 0, wet = 0, snowy = 0;
         years.forEach((y, yi) => {
           const m = packs[yi]?.[i]; if (!m) return;
           for (let k = -3; k <= 3; k++) {
             const s = m.get(new Date(Date.UTC(y, d.getUTCMonth(), d.getUTCDate() + k, d.getUTCHours())).toISOString().slice(0, 13) + ':00');
             if (!s) continue;
-            n++; st += s[0]; sw += s[2]; sf += s[3]; if (s[1] >= 0.25) wet++;
+            n++; st += s[0]; sw += s[2]; sf += s[3]; if (s[1] >= 0.25) { wet++; if (s[4] > 0) snowy++; }
           }
         });
         if (!n) return null;
-        return { off, t: Math.round(st / n), feels: sf / n, pop: Math.round(100 * wet / n / 5) * 5, wind: Math.round(sw / n), code: null, day: true };
+        return { off, t: Math.round(st / n), feels: sf / n, pop: Math.round(100 * wet / n / 5) * 5, wind: Math.round(sw / n), code: null, day: true, snowShare: wet ? snowy / wet : null };
       });
       if (hrs[2]) { g.wxHours = hrs; g.wxSrc = 'typical'; }
     }
@@ -509,10 +509,32 @@ export async function attachWeather(all, start, end) {
   if (list.some(g => g.lat != null && !g.wxHours)) throw new Error('Some weather did not load');
 }
 
+// What the weather is, from the forecast's weather code
+const WMO = { 0: 'Clear', 1: 'Mostly clear', 2: 'Partly cloudy', 3: 'Overcast', 45: 'Fog', 48: 'Freezing fog',
+  51: 'Light drizzle', 53: 'Drizzle', 55: 'Heavy drizzle', 56: 'Freezing drizzle', 57: 'Freezing drizzle',
+  61: 'Light rain', 63: 'Rain', 65: 'Heavy rain', 66: 'Freezing rain', 67: 'Freezing rain',
+  71: 'Light snow', 73: 'Snow', 75: 'Heavy snow', 77: 'Snow grains', 80: 'Rain showers', 81: 'Rain showers', 82: 'Heavy rain showers',
+  85: 'Snow showers', 86: 'Heavy snow showers', 95: 'Thunderstorms', 96: 'Thunderstorms with hail', 99: 'Thunderstorms with hail' };
+export const conditionText = h => (h?.code == null ? null : WMO[h.code] || null);
+// What would fall: snow, ice (freezing rain or drizzle), storms or rain. Without a weather code (typical weather)
+// it goes by how often it snowed in past years, or by temperature.
+export function precipKind(h) {
+  const c = h?.code;
+  if (c != null) {
+    if ((c >= 71 && c <= 77) || c === 85 || c === 86) return 'snow';
+    if ([56, 57, 66, 67].includes(c)) return 'ice';
+    if (c >= 95) return 'storm';
+    if (c >= 51) return 'rain';
+  }
+  if (h?.snowShare != null) return h.snowShare >= 0.5 ? 'snow' : 'rain';
+  return (h?.t ?? 50) <= 32 ? 'snow' : 'rain';
+}
+export const KIND_WORD = { snow: 'snow', ice: 'freezing rain', storm: 'storms', rain: 'rain' };
+
 export function skyOf(h, indoor) {
   if (!h) return indoor ? 'indoor' : 'none';
   const c = h.code;
-  if (c == null) return h.pop >= 50 ? 'rain' : h.pop >= 25 ? 'partly' : 'clear';
+  if (c == null) return h.pop >= 50 ? (precipKind(h) === 'snow' ? 'snow' : 'rain') : h.pop >= 25 ? 'partly' : 'clear';
   if (c >= 95) return 'storm';
   if ((c >= 71 && c <= 77) || c === 85 || c === 86) return 'snow';
   if (c >= 51) return 'rain';
@@ -542,7 +564,8 @@ export function scoreWeather(g) {
       const outdoor = Math.max(0, Math.min(100, Math.round(s)));
       // Under a roof the weather only matters on the way there, so it counts for much less
       const val = g.indoor ? Math.round(72 + outdoor * 0.18) : g.roof ? Math.max(outdoor, 85) : outdoor;
-      g.wx = { val, outdoor, t0: g.wxHours[2].t, feels0: Math.round(g.wxHours[2].feels), feels: Math.round(feels), pop, wind, storm, sky: skyOf(g.wxHours[2], g.indoor) };
+      const wettest = win.reduce((a, h) => (h.pop > a.pop ? h : a), win[0]);
+      g.wx = { cond: conditionText(g.wxHours[2]), kind: precipKind(wettest), t0: g.wxHours[2].t, val, outdoor, feels0: Math.round(g.wxHours[2].feels), feels: Math.round(feels), pop, wind, storm, sky: skyOf(g.wxHours[2], g.indoor) };
     }
   }
   if (!g.wx && covered) g.wx = { val: g.indoor ? 80 : 85, bare: true, sky: 'indoor' };

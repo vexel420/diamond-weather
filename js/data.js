@@ -1,5 +1,5 @@
 // Hand-written reference data: airports, airline hubs, and airport-to-venue transit notes.
-// Transit levels: 4 train to the door, 3 easy transit, 2 doable (a bus, a transfer, or a short rideshare), 1 plan on a car.
+// Transit levels: 4 train to the door, 3 easy transit, 2 a bus or a short ride (a transfer, or a short rideshare), 1 needs a car.
 
 // Airports named in the venue notes. code: [name, lat, lon, time zone]
 // The home airport picker reads the full worldwide list from data/airports.json instead.
@@ -64,7 +64,7 @@ export const AIRLINES = {
   WS:['WestJet', ['YYC','YVR','YYZ','YEG','YWG']]
 };
 
-export const TRANSIT_LABEL = { 4:'Train to the door', 3:'Easy transit', 2:'Doable', 1:'Plan on a car', 0:'No notes' };
+export const TRANSIT_LABEL = { 4:'Train to the door', 3:'Easy transit', 2:'Bus or short ride', 1:'Needs a car', 0:'No notes' };
 
 const r = (a, mins, how) => ({ a, mins, how });
 

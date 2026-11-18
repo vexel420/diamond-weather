@@ -12,7 +12,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/styles.css?v=11">
+<link rel="stylesheet" href="css/styles.css?v=12">
 </head>
 <body>
 <header class="top">
@@ -77,19 +77,33 @@
 
       <fieldset>
         <legend>Weather</legend>
-        <div class="seg full" id="unitSeg" role="group" aria-label="Temperature units">
-          <button type="button" data-u="F">°F</button><button type="button" data-u="C">°C</button><button type="button" data-u="both">Both</button>
+        <div class="ctl">
+          <span class="sublbl">Show temperatures in</span>
+          <div class="seg full" id="unitSeg" role="group" aria-label="Temperature units">
+            <button type="button" data-u="F">°F</button><button type="button" data-u="C">°C</button><button type="button" data-u="both">Both</button>
+          </div>
         </div>
-        <label class="range"><span>Coldest it feels</span><input type="range" id="minTemp" min="-10" max="90"><output id="minTempOut"></output></label>
-        <label class="range"><span>Hottest it feels</span><input type="range" id="maxTemp" min="50" max="115"><output id="maxTempOut"></output></label>
-        <label class="range"><span>Rain chance</span><input type="range" id="maxRain" min="0" max="100" step="5"><output id="maxRainOut"></output></label>
+        <div class="ctl">
+          <span class="sublbl">Filter temperature by</span>
+          <div class="seg full" id="basisSeg" role="group" aria-label="Filter temperature by">
+            <button type="button" data-b="actual">Actual</button><button type="button" data-b="feels">Feels like</button><button type="button" data-b="both">Both</button>
+          </div>
+          <p class="hint" id="basisHint"></p>
+        </div>
+        <label class="range"><span>Coldest</span><output id="minTempOut"></output><input type="range" id="minTemp" min="-10" max="90"></label>
+        <label class="range"><span>Hottest</span><output id="maxTempOut"></output><input type="range" id="maxTemp" min="50" max="115"></label>
+        <label class="range"><span>Chance of rain or snow</span><output id="maxRainOut"></output><input type="range" id="maxRain" min="0" max="100" step="5"></label>
         <label class="check"><input type="checkbox" id="coverPass"><span>Roofed and indoor venues skip these</span></label>
       </fieldset>
 
       <fieldset>
-        <legend>Getting there from the airport</legend>
-        <div class="seg full" id="transitSeg" role="group" aria-label="Transit">
-          <button type="button" data-t="1">Any</button><button type="button" data-t="2">Doable</button><button type="button" data-t="3">Easy</button><button type="button" data-t="4">Train</button>
+        <legend>Getting from the airport</legend>
+        <p class="hint">Show games where the ride from the airport is:</p>
+        <div class="opts" id="transitOpts">
+          <label class="check"><input type="checkbox" data-level="4"><span><span class="dot g4"></span>Train or light rail to the door</span></label>
+          <label class="check"><input type="checkbox" data-level="3"><span><span class="dot g3"></span>Easy transit, one change</span></label>
+          <label class="check"><input type="checkbox" data-level="2"><span><span class="dot g2"></span>A bus or a short ride</span></label>
+          <label class="check"><input type="checkbox" data-level="1"><span><span class="dot g1"></span>Needs a car</span></label>
         </div>
       </fieldset>
 
@@ -172,6 +186,6 @@
   </form>
 </dialog>
 
-<script type="module" src="js/app.js?v=11"></script>
+<script type="module" src="js/app.js?v=12"></script>
 </body>
 </html>

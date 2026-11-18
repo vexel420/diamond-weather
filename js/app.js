@@ -1,9 +1,9 @@
-import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=11';
+import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=12';
 import {
   todayStr, addDays, clock, pad, OFFSETS,
   loadBaseball, loadHockey, nextBaseballDate, nextHockeyDate, nhlUpdated, loadEspn, nextEspnDate, loadTournaments, nextEventDate,
-  attachWeather, attachPrices, attachEspnPrices, scoreGame, DEPLANE, weatherGrade, skyOf, findPairs, ticketLinks, TRIP_LABEL
-} from './core.js?v=11';
+  attachWeather, attachPrices, attachEspnPrices, conditionText, precipKind, KIND_WORD, scoreGame, DEPLANE, weatherGrade, skyOf, findPairs, ticketLinks, TRIP_LABEL
+} from './core.js?v=12';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -23,7 +23,7 @@ const POWER = ['SEC', 'Big Ten', 'ACC', 'Big 12', 'Big East'];
 // ───────── State ─────────
 const DEFAULTS = {
   sports: ALL_SPORTS, knownSports: ALL_SPORTS, tab: 'pro', confs: [], span: 3, sort: 'best',
-  minTemp: -10, maxTemp: 115, units: 'F', maxRain: 100, coverPass: true, transit: 1, trip: 'any', maxPrice: 300, savedOnly: false,
+  minTemp: -10, maxTemp: 115, units: 'F', tempBasis: 'both', maxRain: 100, coverPass: true, transitOk: [1, 2, 3, 4], trip: 'any', maxPrice: 300, savedOnly: false,
   home: '', airline: '', stops: true, earliest: 360, latest: 1260, cushion: 45, sgKey: ''
 };
 let prefs = { ...DEFAULTS };
@@ -39,7 +39,9 @@ try {
     prefs = { ...DEFAULTS, ...s.prefs }; saved = new Set(s.saved || []); storedKnown = s.prefs?.knownSports || ['mlb', 'aaa', 'nhl'];
     if (!s.prefs?.v && prefs.minTemp <= 10) prefs.minTemp = DEFAULTS.minTemp;
   }
-  prefs.v = 2;
+  if (typeof prefs.transit === 'number' && !s?.prefs?.transitOk) prefs.transitOk = [1, 2, 3, 4].filter(l => l >= prefs.transit);
+  delete prefs.transit;
+  prefs.v = 3;
 } catch { /* storage unavailable: run with defaults */ }
 // Sports added since this browser last visited start switched on
 if (storedKnown) {
@@ -145,7 +147,7 @@ function filterCount() {
   if (prefs.minTemp > DEFAULTS.minTemp) n++;
   if (prefs.maxTemp < DEFAULTS.maxTemp) n++;
   if (prefs.maxRain < DEFAULTS.maxRain) n++;
-  if (prefs.transit > 1) n++;
+  if (prefs.transitOk.length < 4) n++;
   if (prefs.trip !== 'any' && prefs.home) n++;
   if (prefs.maxPrice < DEFAULTS.maxPrice && hasPrices()) n++;
   if (prefs.savedOnly) n++;
@@ -158,7 +160,7 @@ function passes(g) {
   if (q && ![g.title, g.label, g.away?.name, g.home?.name, g.venue, g.city, g.affiliate, ...(g.confs || [])].some(s => (s || '').toLowerCase().includes(q))) return false;
   if (prefs.tab === 'college' && prefs.confs.length && !(g.confs || []).some(c => prefs.confs.includes(c))) return false;
   if (prefs.savedOnly && !saved.has(g.venueKey)) return false;
-  if (prefs.transit > 1 && g.level < prefs.transit) return false;
+  if (g.level > 0 && !prefs.transitOk.includes(g.level)) return false;   // venues with no notes always show
   if (prefs.home && prefs.trip !== 'any') {
     const k = g.trip?.kind;
     if (prefs.trip === 'day' && !(k === 'day' || k === 'local')) return false;
@@ -169,7 +171,8 @@ function passes(g) {
   if (!wxOn) return true;
   if ((g.indoor || g.roof) && prefs.coverPass) return true;
   if (!g.wx || g.wx.bare) return false;
-  return g.wx.feels0 >= prefs.minTemp && g.wx.feels0 <= prefs.maxTemp && g.wx.pop <= prefs.maxRain;
+  const temps = prefs.tempBasis === 'actual' ? [g.wx.t0] : prefs.tempBasis === 'feels' ? [g.wx.feels0] : [g.wx.t0, g.wx.feels0];
+  return temps.every(t => t >= prefs.minTemp && t <= prefs.maxTemp) && g.wx.pop <= prefs.maxRain;
 }
 
 // ───────── Card pieces ─────────
@@ -180,14 +183,15 @@ function weatherFact(g) {
   if (!w) return `<div class="fact"><div class="k">${icon('none')} ${state === 'ready' && !weatherDone ? 'Loading forecast' : 'No forecast yet'}</div><div class="s">${state === 'ready' && !weatherDone ? 'One moment' : 'Check back closer to the game'}</div></div>`;
   if (w.bare) return `<div class="fact"><div class="k">${icon('indoor')} ${g.indoor ? 'Indoors' : esc(g.roof)}</div><div class="s">Plays in any weather</div></div>`;
   const typ = g.wxSrc === 'typical';
-  const sub = g.indoor ? `Indoors. Outside feels like ${deg(w.feels0)}` : `${typ ? 'Typically feels' : 'Feels'} like ${deg(w.feels0)}, ${w.pop}% rain${g.roof ? ', roof' : ''}`;
+  const wet = w.pop >= 5 ? `, ${w.pop}% chance of ${KIND_WORD[w.kind]}` : '';
+  const sub = `${typ ? 'Typical for the week' : w.cond || 'Forecast'}, feels like ${deg(w.feels0)}${wet}${g.roof ? ', roof' : ''}`;
   return `<div class="fact"><div class="k">${icon(w.sky)} <span class="temp">${bigTemp(w.t0)}</span></div><div class="s"><span class="dot g${g.indoor ? 0 : gr.n}" style="display:inline-block;margin-right:6px"></span>${esc(sub)}</div></div>`;
 }
 function transitFact(g) {
   if (!g.info) return `<div class="fact"><div class="k"><span class="dot"></span> No transit notes</div><div class="s">Not a regular home venue</div></div>`;
   const r = g.trip ? g.info.routes.find(x => x.a === g.trip.airport) || g.info.routes[0] : g.info.routes[0];
   const more = g.info.routes.length - 1;
-  return `<div class="fact"><div class="k"><span class="dot g${g.level}"></span> ${g.info.drive ? (g.level >= 2 ? 'Short drive' : 'Plan on a car') : TRANSIT_LABEL[g.level]}</div><div class="s">About ${r.mins} min ${g.info.drive ? 'by car ' : ''}from ${r.a}${more ? `, +${more} airport${more > 1 ? 's' : ''}` : ''}</div></div>`;
+  return `<div class="fact"><div class="k"><span class="dot g${g.level}"></span> ${g.info.drive ? (g.level >= 2 ? 'Short ride' : 'Needs a car') : TRANSIT_LABEL[g.level]}</div><div class="s">About ${r.mins} min ${g.info.drive ? 'by car ' : ''}from ${r.a}${more ? `, +${more} airport${more > 1 ? 's' : ''}` : ''}</div></div>`;
 }
 const spare = m => m < 60 ? `${m} min` : m % 60 ? `${Math.floor(m / 60)} h ${m % 60} min` : m === 60 ? '1 hour' : `${m / 60} hours`;
 const startWord = g => START_WORD[g.sport] || 'the start';
@@ -260,8 +264,8 @@ function dailyHTML(g) {
   return `<div class="daily">${g.daily.map((d, i) => `<div class="day">
       <span class="d"><b>${niceDate(d.date, { weekday: 'short' })}</b> ${niceDate(d.date, { month: 'short', day: 'numeric' })}</span>
       ${d.hi == null ? '<span></span><span class="muted">No forecast yet</span><span></span>' : `${icon(skyOf({ code: d.code, pop: d.pop, day: true }, false), 18)}
-      <span class="hl">${tMain(d.hi)}° / ${tMain(d.lo)}°<small>feels ${tMain(d.feels)}°</small></span>
-      <span class="r${d.pop >= 30 ? ' wet' : ''}">${d.pop}% rain</span>`}</div>`).join('')}</div>`;
+      <span class="hl">${tMain(d.hi)}° / ${tMain(d.lo)}°<small>feels ${tMain(d.feels)}°</small><span class="c">${esc(conditionText(d) || '')}</span></span>
+      <span class="r${d.pop >= 30 ? ' wet' : ''} ${precipKind(d)}">${d.pop}% ${KIND_WORD[precipKind(d)]}</span>`}</div>`).join('')}</div>`;
 }
 function hoursHTML(g) {
   if (!g.wxHours) return `<p class="hint">${state === 'ready' && errors.includes('weather') ? "The forecast service didn't answer. Refresh to try again." : 'No hourly forecast for this date yet.'}</p>`;
@@ -270,12 +274,12 @@ function hoursHTML(g) {
     if (!h) return `<div class="hr"><span class="h">${t}</span><span class="t muted">–</span></div>`;
     return `<div class="hr${OFFSETS[i] === 0 ? ' first' : ''}">
       <span class="h">${t}</span>${icon(skyOf(h, false), 18)}<span class="t">${tMain(h.t)}°</span>${prefs.units === 'both' ? `<span class="t2">${toC(h.t)}°C</span>` : ''}<span class="fl">${tMain(h.feels)}°</span>
-      <span class="bar" title="${h.pop}% chance of rain"><i style="height:${h.pop}%"></i></span>
-      <span class="p${h.pop >= 30 ? ' wet' : ''}">${h.pop}%</span><span class="w">${h.wind}<i> mph</i></span></div>`;
+      <span class="bar ${precipKind(h)}" title="${esc(conditionText(h) || '')}${conditionText(h) ? '. ' : ''}${h.pop}% chance of ${KIND_WORD[precipKind(h)]}"><i style="height:${h.pop}%"></i></span>
+      <span class="p${h.pop >= 30 ? ' wet' : ''} ${precipKind(h)}">${h.pop}%</span><span class="w">${h.wind}<i> mph</i></span></div>`;
   }).join('');
   const cap = g.wxSrc === 'typical'
     ? `Too far out for a forecast. This is what is typical for the week, averaged over the past three years. Grey numbers are what it feels like${prefs.units === 'both' ? ' in °F' : ''}.`
-    : `Shaded column is ${startWord(g)}. Grey numbers are what it feels like${prefs.units === 'both' ? ' in °F' : ''}. Bars show the chance of rain; wind is in mph.`;
+    : `Shaded column is ${startWord(g)}. Grey numbers are what it feels like${prefs.units === 'both' ? ' in °F' : ''}. Bars show the chance of rain (blue) or snow (purple); wind is in mph.`;
   return `<div class="hours">${cells}</div><p class="cap">${cap}</p>`;
 }
 function mapsLink(g, r) {
@@ -445,7 +449,7 @@ function render() {
   const foot = $('foot'); foot.hidden = false;
   const upd = nhlUpdated();
   foot.innerHTML = `<p>Land-by times allow ${DEPLANE} minutes to get off the plane, the transit ride, and ${spare(prefs.cushion)} to spare before the start; change the spare time in Trip settings.</p>
-    <p>Best overall ranks games by weather, the airport-to-venue ride${prefs.home ? ' and how easy the flight is' : ''}. Weather looks at the hours you would be in your seat: a feels-like temperature between ${deg(65)} and ${deg(82)}, the highest rain chance, wind and storms. The temperature filters use the feels-like temperature at the start. Indoor and roofed venues are mostly shielded from it.</p>
+    <p>Best overall ranks games by weather, the airport-to-venue ride${prefs.home ? ' and how easy the flight is' : ''}. Weather looks at the hours you would be in your seat: a feels-like temperature between ${deg(65)} and ${deg(82)}, the highest rain chance, wind and storms. The temperature filters use the actual temperature, the feels-like, or both at the start, as you choose. Indoor and roofed venues are mostly shielded from it.</p>
     <p>Transit times are estimates without checked bags, written by hand; service thins out late, so check the last train before a night game. All times are local to the venue.</p>
     <p>Schedules from MLB, the NHL and ESPN${upd ? ` (NHL refreshed ${new Date(upd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})` : ''}, weather from Open-Meteo${hasPrices() ? `, prices from ${[...new Set(games.filter(g => g.price != null).map(g => g.priceSrc || 'SeatGeek'))].join(' and ')}` : ''}. College basketball covers Division I. ESPN lists only some college baseball games.</p>`;
 }
@@ -458,7 +462,10 @@ function syncControls() {
   $('sports').innerHTML = `<button type="button" data-sport="all" aria-pressed="${allOn}" title="Turn every sport on this tab on, or all off">All</button>`
     + TABS[prefs.tab].map(([k, name]) => `<button type="button" data-sport="${k}" aria-pressed="${prefs.sports.includes(k)}">${esc(name)}</button>`).join('');
   confRow();
-  press('spanSeg', 'span', prefs.span); press('transitSeg', 't', prefs.transit); press('tripSeg', 'trip', prefs.home ? prefs.trip : 'any');
+  press('spanSeg', 'span', prefs.span); press('basisSeg', 'b', prefs.tempBasis);
+  document.querySelectorAll('#transitOpts input').forEach(i => { i.checked = prefs.transitOk.includes(+i.dataset.level); });
+  $('basisHint').textContent = { actual: 'Uses the actual temperature at the start.', feels: 'Uses what it feels like at the start, with wind and humidity.',
+    both: 'Both the actual and the feels-like temperature at the start must be in range.' }[prefs.tempBasis]; press('tripSeg', 'trip', prefs.home ? prefs.trip : 'any');
   document.querySelectorAll('#tripSeg button').forEach(b => { b.disabled = !prefs.home && b.dataset.trip !== 'any'; });
   const set = (id, v) => { const el = $(id); if (el.value !== String(v)) el.value = v; };
   set('minTemp', prefs.minTemp); set('maxTemp', prefs.maxTemp); set('maxRain', prefs.maxRain); set('maxPrice', prefs.maxPrice); set('sortSel', prefs.sort);
@@ -532,7 +539,8 @@ $('sports').onclick = e => {
 };
 $('sortSel').onchange = e => { prefs.sort = e.target.value; store(); render(); };
 $('unitSeg').onclick = e => { const b = e.target.closest('button'); if (b) { prefs.units = b.dataset.u; store(); render(); } };
-$('transitSeg').onclick = e => { const b = e.target.closest('button'); if (b) { prefs.transit = +b.dataset.t; refilter(); } };
+$('basisSeg').onclick = e => { const b = e.target.closest('button'); if (b) { prefs.tempBasis = b.dataset.b; refilter(); } };
+$('transitOpts').onchange = () => { prefs.transitOk = [...document.querySelectorAll('#transitOpts input:checked')].map(i => +i.dataset.level); refilter(); };
 $('tripSeg').onclick = e => { const b = e.target.closest('button'); if (b && !b.disabled) { prefs.trip = b.dataset.trip; refilter(); } };
 ['minTemp', 'maxTemp', 'maxRain', 'maxPrice'].forEach(id => { $(id).oninput = e => { prefs[id] = +e.target.value; refilter(); }; });
 $('q').oninput = e => { query = e.target.value.trim(); refilter(); };
@@ -540,7 +548,7 @@ $('savedOnly').onchange = e => { prefs.savedOnly = e.target.checked; refilter();
 $('coverPass').onchange = e => { prefs.coverPass = e.target.checked; refilter(); };
 $('stops').onchange = e => { prefs.stops = e.target.checked; replan(); };
 function resetFilters() {
-  for (const k of ['minTemp', 'maxTemp', 'maxRain', 'coverPass', 'transit', 'trip', 'maxPrice', 'savedOnly']) prefs[k] = DEFAULTS[k];
+  for (const k of ['minTemp', 'maxTemp', 'maxRain', 'coverPass', 'transitOk', 'trip', 'maxPrice', 'savedOnly']) prefs[k] = DEFAULTS[k];
   query = ''; $('q').value = ''; refilter();
 }
 $('resetBtn').onclick = resetFilters;
@@ -583,7 +591,7 @@ $('cushionIn').innerHTML = [30, 45, 60, 90, 120].map(m => `<option value="${m}">
 // Home airport picker: a searchable list of every airport with airline service
 let airportDb = null, airportLoad = null, pick = null, matches = [], hi = -1;
 function loadAirports() {
-  airportLoad ||= fetch('data/airports.json?v=11')
+  airportLoad ||= fetch('data/airports.json?v=12')
     .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
     .then(d => {
       airportDb = d.list.map(a => ({

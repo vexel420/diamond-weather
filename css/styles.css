@@ -16,6 +16,8 @@
   --bad: #cf2f2f;
   --bad-wash: #fdeeee;
   --rain: #2f7fe6;
+  --snow: #6a6fd8;
+  --ice: #0f8fa3;
   --font: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
   --r: 14px;
   --shadow: 0 1px 2px rgba(11, 14, 20, .04), 0 8px 24px -12px rgba(11, 14, 20, .12);
@@ -113,9 +115,14 @@ legend { font-size: 13px; font-weight: 600; color: var(--ink); padding: 0; margi
 .hint { font-size: 13px; color: var(--sub); line-height: 1.45; }
 .field { width: 100%; height: 40px; padding: 0 12px; border-radius: 10px; border: 1px solid var(--line-strong); background: var(--bg); }
 .field:hover { border-color: var(--faint); }
-.range { display: grid; grid-template-columns: 88px minmax(0, 1fr) minmax(44px, auto); align-items: center; gap: 10px; font-size: 13.5px; color: var(--sub); }
-.range input { width: 100%; accent-color: var(--ink); }
-.range output { text-align: right; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.range { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 4px 10px; font-size: 13.5px; color: var(--sub); }
+.range span { grid-row: 1; grid-column: 1; }
+.range output { grid-row: 1; grid-column: 2; text-align: right; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.range input { grid-row: 2; grid-column: 1 / -1; width: 100%; margin: 0; accent-color: var(--ink); }
+.ctl { display: grid; gap: 6px; }
+.sublbl { font-size: 13px; color: var(--sub); }
+.opts { display: grid; gap: 9px; }
+.opts .dot { display: inline-block; margin: 0 8px 1px 0; vertical-align: middle; }
 .check { display: flex; gap: 9px; align-items: flex-start; font-size: 13.5px; color: var(--sub); cursor: pointer; }
 .check input { width: 16px; height: 16px; margin-top: 2px; accent-color: var(--ink); flex: none; }
 .switch { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 500; cursor: pointer; }
@@ -209,6 +216,10 @@ h3.group small { font-size: 13.5px; font-weight: 450; color: var(--faint); lette
 .hr .bar { width: 14px; height: 34px; border-radius: 5px; background: var(--wash); display: flex; align-items: flex-end; overflow: hidden; }
 .hr.first .bar { background: #e6e8ee; }
 .hr .bar i { display: block; width: 100%; background: var(--rain); border-radius: 5px 5px 0 0; min-height: 0; }
+.hr .bar.snow i { background: var(--snow); } .hr .bar.ice i { background: var(--ice); }
+.hr .p.wet.snow { color: var(--snow); } .hr .p.wet.ice { color: var(--ice); }
+.day .r.wet.snow { color: var(--snow); }
+.day .c { display: block; font-size: 12.5px; color: var(--sub); font-weight: 450; }
 .hr .p { font-size: 12px; color: var(--sub); }
 .hr .p.wet { color: var(--rain); font-weight: 600; }
 .hr .w { font-size: 11.5px; color: var(--faint); }
