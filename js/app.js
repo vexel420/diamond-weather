@@ -1,9 +1,9 @@
-import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=12';
+import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=13';
 import {
   todayStr, addDays, clock, pad, OFFSETS,
   loadBaseball, loadHockey, nextBaseballDate, nextHockeyDate, nhlUpdated, loadEspn, nextEspnDate, loadTournaments, nextEventDate,
   attachWeather, attachPrices, attachEspnPrices, conditionText, precipKind, KIND_WORD, scoreGame, DEPLANE, weatherGrade, skyOf, findPairs, ticketLinks, TRIP_LABEL
-} from './core.js?v=12';
+} from './core.js?v=13';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -23,7 +23,7 @@ const POWER = ['SEC', 'Big Ten', 'ACC', 'Big 12', 'Big East'];
 // ───────── State ─────────
 const DEFAULTS = {
   sports: ALL_SPORTS, knownSports: ALL_SPORTS, tab: 'pro', confs: [], span: 3, sort: 'best',
-  minTemp: -10, maxTemp: 115, units: 'F', tempBasis: 'both', maxRain: 100, coverPass: true, transitOk: [1, 2, 3, 4], trip: 'any', maxPrice: 300, savedOnly: false,
+  minTemp: -10, maxTemp: 115, units: 'F', tempBasis: 'actual', maxRain: 100, coverPass: true, transitOk: [1, 2, 3, 4], trip: 'any', maxPrice: 300, savedOnly: false,
   home: '', airline: '', stops: true, earliest: 360, latest: 1260, cushion: 45, sgKey: ''
 };
 let prefs = { ...DEFAULTS };
@@ -41,6 +41,7 @@ try {
   }
   if (typeof prefs.transit === 'number' && !s?.prefs?.transitOk) prefs.transitOk = [1, 2, 3, 4].filter(l => l >= prefs.transit);
   delete prefs.transit;
+  if (prefs.tempBasis === 'both') prefs.tempBasis = 'actual';
   prefs.v = 3;
 } catch { /* storage unavailable: run with defaults */ }
 // Sports added since this browser last visited start switched on
@@ -171,8 +172,8 @@ function passes(g) {
   if (!wxOn) return true;
   if ((g.indoor || g.roof) && prefs.coverPass) return true;
   if (!g.wx || g.wx.bare) return false;
-  const temps = prefs.tempBasis === 'actual' ? [g.wx.t0] : prefs.tempBasis === 'feels' ? [g.wx.feels0] : [g.wx.t0, g.wx.feels0];
-  return temps.every(t => t >= prefs.minTemp && t <= prefs.maxTemp) && g.wx.pop <= prefs.maxRain;
+  const t = prefs.tempBasis === 'feels' ? g.wx.feels0 : g.wx.t0;
+  return t >= prefs.minTemp && t <= prefs.maxTemp && g.wx.pop <= prefs.maxRain;
 }
 
 // ───────── Card pieces ─────────
@@ -449,7 +450,7 @@ function render() {
   const foot = $('foot'); foot.hidden = false;
   const upd = nhlUpdated();
   foot.innerHTML = `<p>Land-by times allow ${DEPLANE} minutes to get off the plane, the transit ride, and ${spare(prefs.cushion)} to spare before the start; change the spare time in Trip settings.</p>
-    <p>Best overall ranks games by weather, the airport-to-venue ride${prefs.home ? ' and how easy the flight is' : ''}. Weather looks at the hours you would be in your seat: a feels-like temperature between ${deg(65)} and ${deg(82)}, the highest rain chance, wind and storms. The temperature filters use the actual temperature, the feels-like, or both at the start, as you choose. Indoor and roofed venues are mostly shielded from it.</p>
+    <p>Best overall ranks games by weather, the airport-to-venue ride${prefs.home ? ' and how easy the flight is' : ''}. Weather looks at the hours you would be in your seat: a feels-like temperature between ${deg(65)} and ${deg(82)}, the highest rain chance, wind and storms. The temperature filters use either the actual or the feels-like temperature at the start, as you choose. Indoor and roofed venues are mostly shielded from it.</p>
     <p>Transit times are estimates without checked bags, written by hand; service thins out late, so check the last train before a night game. All times are local to the venue.</p>
     <p>Schedules from MLB, the NHL and ESPN${upd ? ` (NHL refreshed ${new Date(upd).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })})` : ''}, weather from Open-Meteo${hasPrices() ? `, prices from ${[...new Set(games.filter(g => g.price != null).map(g => g.priceSrc || 'SeatGeek'))].join(' and ')}` : ''}. College basketball covers Division I. ESPN lists only some college baseball games.</p>`;
 }
@@ -464,8 +465,7 @@ function syncControls() {
   confRow();
   press('spanSeg', 'span', prefs.span); press('basisSeg', 'b', prefs.tempBasis);
   document.querySelectorAll('#transitOpts input').forEach(i => { i.checked = prefs.transitOk.includes(+i.dataset.level); });
-  $('basisHint').textContent = { actual: 'Uses the actual temperature at the start.', feels: 'Uses what it feels like at the start, with wind and humidity.',
-    both: 'Both the actual and the feels-like temperature at the start must be in range.' }[prefs.tempBasis]; press('tripSeg', 'trip', prefs.home ? prefs.trip : 'any');
+  $('basisHint').textContent = { actual: 'Uses the actual temperature at the start.', feels: 'Uses what it feels like at the start, with wind and humidity.' }[prefs.tempBasis]; press('tripSeg', 'trip', prefs.home ? prefs.trip : 'any');
   document.querySelectorAll('#tripSeg button').forEach(b => { b.disabled = !prefs.home && b.dataset.trip !== 'any'; });
   const set = (id, v) => { const el = $(id); if (el.value !== String(v)) el.value = v; };
   set('minTemp', prefs.minTemp); set('maxTemp', prefs.maxTemp); set('maxRain', prefs.maxRain); set('maxPrice', prefs.maxPrice); set('sortSel', prefs.sort);
@@ -591,7 +591,7 @@ $('cushionIn').innerHTML = [30, 45, 60, 90, 120].map(m => `<option value="${m}">
 // Home airport picker: a searchable list of every airport with airline service
 let airportDb = null, airportLoad = null, pick = null, matches = [], hi = -1;
 function loadAirports() {
-  airportLoad ||= fetch('data/airports.json?v=12')
+  airportLoad ||= fetch('data/airports.json?v=13')
     .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
     .then(d => {
       airportDb = d.list.map(a => ({
