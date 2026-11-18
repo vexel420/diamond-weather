@@ -1,5 +1,5 @@
 // Loading games, weather, ticket prices, and working out scores and trips. No DOM in this file.
-import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS, NBA_VENUES, NFL_VENUES, VENUE_NOTES } from './data.js?v=13';
+import { AIRPORTS, AIRLINES, MLB_VENUES, AAA_VENUES, NHL_ARENAS, NBA_VENUES, NFL_VENUES, VENUE_NOTES } from './data.js?v=14';
 
 // ───────── Dates and time zones ─────────
 export const pad = n => String(n).padStart(2, '0');
@@ -205,7 +205,7 @@ async function locateUnknown(list) {
     if (!loc) continue;
     g.lat = loc.lat; g.lon = loc.lon; g.tz = loc.tz || g.tz;
     if (!g.info) {
-      airportRows ||= await getJSON('data/airports.json?v=13').then(d => d.list.map(a => [a[0], a[1], a[4], a[5], d.zones[a[6]]])).catch(() => []);
+      airportRows ||= await getJSON('data/airports.json?v=14').then(d => d.list.map(a => [a[0], a[1], a[4], a[5], d.zones[a[6]]])).catch(() => []);
       const near = airportRows.map(a => [a, miles(loc.lat, loc.lon, a[2], a[3])]).sort((x, y) => x[1] - y[1]).slice(0, 2);
       for (const [a] of near) AIRPORTS[a[0]] ||= [a[1], a[2], a[3], a[4]];
       g.info = driveInfo(near.map(([a, mi]) => [a[0], Math.round(mi)]), g.city);

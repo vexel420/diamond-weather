@@ -1,9 +1,9 @@
-import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=13';
+import { AIRPORTS, AIRLINES, TRANSIT_LABEL } from './data.js?v=14';
 import {
   todayStr, addDays, clock, pad, OFFSETS,
   loadBaseball, loadHockey, nextBaseballDate, nextHockeyDate, nhlUpdated, loadEspn, nextEspnDate, loadTournaments, nextEventDate,
   attachWeather, attachPrices, attachEspnPrices, conditionText, precipKind, KIND_WORD, scoreGame, DEPLANE, weatherGrade, skyOf, findPairs, ticketLinks, TRIP_LABEL
-} from './core.js?v=13';
+} from './core.js?v=14';
 
 const $ = id => document.getElementById(id);
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -173,7 +173,10 @@ function passes(g) {
   if ((g.indoor || g.roof) && prefs.coverPass) return true;
   if (!g.wx || g.wx.bare) return false;
   const t = prefs.tempBasis === 'feels' ? g.wx.feels0 : g.wx.t0;
-  return t >= prefs.minTemp && t <= prefs.maxTemp && g.wx.pop <= prefs.maxRain;
+  // A slider at its end shows "Any" and sets no limit, so colder than -10°F or hotter than 115°F still counts
+  const coldOk = prefs.minTemp <= DEFAULTS.minTemp || t >= prefs.minTemp;
+  const hotOk = prefs.maxTemp >= DEFAULTS.maxTemp || t <= prefs.maxTemp;
+  return coldOk && hotOk && (prefs.maxRain >= DEFAULTS.maxRain || g.wx.pop <= prefs.maxRain);
 }
 
 // ───────── Card pieces ─────────
@@ -591,7 +594,7 @@ $('cushionIn').innerHTML = [30, 45, 60, 90, 120].map(m => `<option value="${m}">
 // Home airport picker: a searchable list of every airport with airline service
 let airportDb = null, airportLoad = null, pick = null, matches = [], hi = -1;
 function loadAirports() {
-  airportLoad ||= fetch('data/airports.json?v=13')
+  airportLoad ||= fetch('data/airports.json?v=14')
     .then(r => { if (!r.ok) throw new Error(`HTTP ${r.status}`); return r.json(); })
     .then(d => {
       airportDb = d.list.map(a => ({
